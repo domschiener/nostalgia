@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nostalgia 2.0</title>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script type="text/javascript" src="js/converter.js"></script>
+<script type="text/javascript" src="js/curl.js"></script>
+<script type="text/javascript" src="js/utils.js"></script>
+<script type="text/javascript" src="js/iotajs.js"></script>
+<script type="text/javascript">
+            var seed, newAddress;
+            var iotajs = new IOTA();
+
+            function generateNewAddress() {
+              alert("This will take a few minutes to complete!");
+              iotajs.getNewAddress(seed, function(error, success) {
+
+                if (!error) {
+                  transfer(success);
+                }
+              })
+            }
+
+            function transfer(address) {
+              if (address) {
+
+                //DO STUFF HERE: prepare, getTxToApprove, attachToTangle, broadcast, store
+                var transfers = [{
+                  'address': address,
+                  'value': 0,
+                  'message': '',
+                  'tag': ''
+                }]
+                
+                iotajs.transfer(seed, transfers, function(error, success) {
+
+                })
+              } else {
+
+                var address = prompt("address"), valueToTransfer;
+                if (address == null) {
+                  alert("The transfer has been canceled!");
+                } else {
+                  valueToTransfer = prompt("Value to transfer to '" + address + "'");
+                  if (valueToTransfer == null || isNaN(valueToTransfer)) {
+                      alert("The transfer has been canceled!");
+                  } else {
+                      alert("This will take a few minutes to complete!");
+                      sendRequest("{'command': 'transfer', 'seed': '" + seed + "', 'securityLevel': 1, 'address': '" + address + "', 'value': '" + valueToTransfer + "', 'message': '', 'minWeightMagnitude': 13}", transferCallback);
+                  }
+                }
+              }
+            }
+
+            function transferCallback(json) {
+                if (json.tail != null) {
+                    alert("The transfer has been broadcast via " + json.neighbors + " neighbors.");
+                } else {
+                    alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
+                }
+            }
+
+
+            function getTransfers() {
+                sendRequest("{'command': 'getTransfers', 'seed': '" + seed + "', 'securityLevel': 1}", getTransfersCallback);
+            }
+
+            function getTransfersCallback(json) {
+                var totalValue = 0, content = "", i;
+                for (i = 0; i < json.transfers.length; i++) {
+                    if (json.transfers[i].persistence > 90) {
+                        totalValue += parseInt(json.transfers[i].value);
+                    }
+
+                    showBundle(json.transfers[i].hash, function(error, success) {
+
+                    });
+
+                    content += "<tr><td>" + new Date(json.transfers[i].timestamp * 1000) + "</td><td id='" + json.transfers[i].hash + "'>" + json.transfers[i].address + "</td><td>" + json.transfers[i].value + "</td><td><button onclick=\"showBundle('" + json.transfers[i].hash + "');\">Show bundle</button></td><td><button onclick=\"replayTransfer('" + json.transfers[i].hash + "');\">" + json.transfers[i].persistence +"%</button></td></tr>";
+                }
+                content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+                content += "<tr><td><button onclick='claimIotas();'>Claim iotas</button></td><td><button onclick='generateNewAddress();'>Generate new address</button></td><td><button onclick='transfer();'>Transfer iotas</button></td><td><button onclick='refreshPage();'>Refresh page</button></td></tr>";
+                document.body.innerHTML = "<table border='1'>" + content + "</table>";
+            }
+
+            function refreshPage() {
+                //getTransfers();
+                getTransfersCallback({'transfers': []})
+            }
+
+            function setSeed(value) {
+                var i;
+                seed = "";
+                for (i = 0; i < value.length; i++) {
+                    if (("9ABCDEFGHIJKLMNOPQRSTUVWXYZ").indexOf(value.charAt(i)) < 0) {
+                        seed += "9";
+                    } else {
+                        seed += value.charAt(i);
+                    }
+                }
+                while (seed.length < 81) {
+                    seed += "9";
+                }
+            }
+
+            function showBundle(transaction, cb2) {
+                sendRequest("{'command': 'getBundle', 'transaction': '" + transaction + "'}", showBundleCallback, cb2);
+            }
+
+            function showBundleCallback(json, cb) {
+                var content = "";
+                for (i = 0; i < json.transactions.length; i++) {
+                  if (json.transactions[i].address === 'PWZUJAMZTAUFTMWZVQYJAKAMBLDUFUAQSTRZUBAUTAOXZRXSF9KCEEWPOQWYLVPDBJZHWAYPEQRPJJYDK') {
+                    console.log("SUCCESS", json.transactions[i].hash);
+                  }
+                  content += json.transactions[i].address + " = " + json.transactions[i].value + "\r\n";
+                }
+
+                var id = "#" + json.transactions[0].hash
+                $(id).html(content)
+
+                return cb(null, true);
+            }
+        </script>
+</head>
+<body>
+    <table>
+        <tr>
+            <td>
+                <input type="password" id="seed" placeholder="Seed" onkeydown="if (event.keyCode == 13) { setSeed(value.toUpperCase()); refreshPage(); }" />
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
