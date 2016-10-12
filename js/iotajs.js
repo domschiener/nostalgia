@@ -250,7 +250,7 @@ IOTA.prototype.broadcastAndStore = function(trytes, callback) {
     if (!error) {
 
       var storeCommand = {
-        'command': 'broadcastTransactions',
+        'command': 'storeTransactions',
         'trytes' : trytes,
       }
 
@@ -369,7 +369,53 @@ IOTA.prototype.analyzeTransactions = function(trytes, callback) {
   *
   *
 **/
-IOTA.prototype.getBundle = function(transactions, callback) {
+IOTA.prototype._addTrytes = function(bundle, signatureFragments) {
+
+  var finalBundle = [];
+  var message;
+
+  for (var i = 0; i < bundle.transactions.length; i++) {
+
+    // Fill empty signatureMessageFragment
+    bundle.transactions[i].signatureMessageFragment = signatureFragments[i];
+
+    // Fill empty trunkTransaction
+    if (bundle.transactions[i].trunkTransaction === undefined) {
+      bundle.transactions[i].trunkTransaction = '9';
+    }
+    for (var j = 0; bundle.transactions[i].trunkTransaction.length < 81; j++) {
+      bundle.transactions[i].trunkTransaction += '9';
+    }
+
+    // Fill empty branchTransaction
+    if (bundle.transactions[i].branchTransaction === undefined) {
+      bundle.transactions[i].branchTransaction = '9';
+    }
+    for (var j = 0; bundle.transactions[i].branchTransaction.length < 81; j++) {
+      bundle.transactions[i].branchTransaction += '9';
+    }
+
+    // Fill empty nonce
+    if (bundle.transactions[i].nonce === undefined) {
+      bundle.transactions[i].nonce = '9';
+    }
+    for (var j = 0; bundle.transactions[i].nonce.length < 81; j++) {
+      bundle.transactions[i].nonce += '9';
+    }
+
+    finalBundle.push(Utils.transactionTrytes(bundle.transactions[i]));
+  }
+
+  return finalBundle;
+}
+
+
+/**
+  * getsTrytes, analyzes, gets bundle hashes,
+  * findTransactions, trytes, analyzes
+  *
+**/
+IOTA.prototype.getBundle = function(transactions, inclusionStates, callback) {
 
   var self = this;
 
@@ -379,15 +425,45 @@ IOTA.prototype.getBundle = function(transactions, callback) {
 
       self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
 
+        var bundleHashes = new Set();
+        var bundleInclusions = {}
         for (var i = 0; i < analyzed.length; i++) {
-          var thisTransaction = analyzed[i];
-
-          if (thisTransaction.lastIndex === 0) {
-
-            //TODO:
-            // check if tail, if not call findTransactions on bundle hash and repeat process
-          }
+          bundleHashes.add(analyzed[i].bundle);
+          bundleInclusions[analyzed[i].bundle] = inclusionStates[transactions.indexOf(analyzed[i].hash)]
         }
+
+        var findTxs = {
+          'command': 'findTransactions',
+          'bundles': Array.from(bundleHashes)
+        }
+
+        self.sendRequest(findTxs, function(error, bundleTxs) {
+
+          self.getTrytes(bundleTxs.hashes, function(error, bundleTrytes) {
+
+            if (!error) {
+
+              return self.analyzeTransactions(bundleTrytes.trytes, function(error, analyzedBundles) {
+
+                var tailTransactions = [];
+                /**
+
+                  Bundle the bundles together (list of lists)
+
+                **/
+                for (var i = 0; i < analyzedBundles.length; i++) {
+                  analyzedBundles[i]['persistence'] = bundleInclusions[analyzedBundles[i].bundle];
+
+                  if (analyzedBundles[i].currentIndex === 0) {
+                    tailTransactions.push(analyzedBundles[i]);
+                  }
+                }
+
+                return callback(null, tailTransactions, analyzedBundles);
+              });
+            }
+          })
+        })
       })
     }
   })
@@ -458,50 +534,6 @@ IOTA.prototype.getInputs = function(valueToDeduct, inputList, index, callback) {
       return callback("ERROR")
     }
   })
-}
-
-/**
-  *
-  *
-**/
-IOTA.prototype._addTrytes = function(bundle, signatureFragments) {
-
-  var finalBundle = [];
-  var message;
-
-  for (var i = 0; i < bundle.transactions.length; i++) {
-
-    // Fill empty signatureMessageFragment
-    bundle.transactions[i].signatureMessageFragment = signatureFragments[i];
-
-    // Fill empty trunkTransaction
-    if (bundle.transactions[i].trunkTransaction === undefined) {
-      bundle.transactions[i].trunkTransaction = '9';
-    }
-    for (var j = 0; bundle.transactions[i].trunkTransaction.length < 81; j++) {
-      bundle.transactions[i].trunkTransaction += '9';
-    }
-
-    // Fill empty branchTransaction
-    if (bundle.transactions[i].branchTransaction === undefined) {
-      bundle.transactions[i].branchTransaction = '9';
-    }
-    for (var j = 0; bundle.transactions[i].branchTransaction.length < 81; j++) {
-      bundle.transactions[i].branchTransaction += '9';
-    }
-
-    // Fill empty nonce
-    if (bundle.transactions[i].nonce === undefined) {
-      bundle.transactions[i].nonce = '9';
-    }
-    for (var j = 0; bundle.transactions[i].nonce.length < 81; j++) {
-      bundle.transactions[i].nonce += '9';
-    }
-
-    finalBundle.push(Utils.transactionTrytes(bundle.transactions[i]));
-  }
-
-  return finalBundle;
 }
 
 /**
@@ -653,14 +685,14 @@ IOTA.prototype.transfer = function(seed, transfers, callback) {
       console.log("Got Milestone", milestone.milestone)
       // Get branch and trunk
       self.getTransactionsToApprove(milestone.milestone, function(error, toApprove) {
-        console.log(error, toApprove)
+
         if (error) {
           return callback(error)
         }
 
         console.log("Got transactions to approve", toApprove);
         // attach to tangle - do pow
-        self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 18, trytes, function(error, attached) {
+        self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
           if (error) {
             return callback("ERROR")
           }
@@ -736,7 +768,9 @@ IOTA.prototype.getTransfers = function(seed, callback) {
 
               if (!err) {
 
-                self.getBundle(transactions.hashes, function(error, bundles) {
+                self.getBundle(transactions.hashes, inclusionStates.states, function(error, tailTransactions, bundles) {
+
+
 
                   // SOME COMPLICATED SHIT HERE
                 })

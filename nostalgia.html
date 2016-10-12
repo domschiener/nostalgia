@@ -15,14 +15,19 @@
             function generateNewAddress() {
               alert("This will take a few minutes to complete!");
               iotajs.getNewAddress(seed, function(error, success) {
-
+                var address = success;
+                console.log("Prepared Address: ", address);
                 if (!error) {
-                  transfer(success);
+
+                  transfer(success, function(error, success) {
+                    console.log(error, success);
+                    iotajs.addresses.push(address);
+                  });
                 }
               })
             }
 
-            function transfer(address) {
+            function transfer(address, callback) {
               if (address) {
 
                 //DO STUFF HERE: prepare, getTxToApprove, attachToTangle, broadcast, store
@@ -32,10 +37,8 @@
                   'message': '',
                   'tag': ''
                 }]
-                
-                iotajs.transfer(seed, transfers, function(error, success) {
 
-                })
+                iotajs.transfer(seed, transfers, callback)
               } else {
 
                 var address = prompt("address"), valueToTransfer;
@@ -63,7 +66,9 @@
 
 
             function getTransfers() {
-                sendRequest("{'command': 'getTransfers', 'seed': '" + seed + "', 'securityLevel': 1}", getTransfersCallback);
+              iotajs.getTransfers(seed, function(error, success) {
+                console.log(error, success);
+              })
             }
 
             function getTransfersCallback(json) {
