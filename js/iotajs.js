@@ -110,43 +110,6 @@ IOTA.prototype.getNodeInfo = function(callback) {
 
 /**
   *
-  *   ALSO DOES GETNODEINFO AUTOMATICALLY
-**/
-IOTA.prototype.getMilestone = function(callback) {
-
-  var self = this;
-
-  self.getNodeInfo(function(err, nodeInfo) {
-
-    if (!err) {
-      var milestoneIndex = nodeInfo.milestoneIndex;
-
-      var command = {
-        'command' : 'getMilestone',
-        'index'   : milestoneIndex
-      }
-
-      self.sendRequest(command, function(error, success) {
-        if (!error) {
-
-          if (callback) {
-
-            return callback(null, success);
-          } else {
-
-            return success
-          }
-
-        } else {
-          return callback(error);
-        }
-      })
-    }
-  })
-}
-
-/**
-  *
   *
 **/
 IOTA.prototype.findTransactions = function(addresses, callback) {
@@ -177,11 +140,11 @@ IOTA.prototype.findTransactions = function(addresses, callback) {
   *
   *
 **/
-IOTA.prototype.getTransactionsToApprove = function(milestone, callback) {
+IOTA.prototype.getTransactionsToApprove = function(depth, callback) {
 
   var command = {
     'command'   : 'getTransactionsToApprove',
-    'milestone' : milestone
+    'depth' : depth
   }
 
   this.sendRequest(command, function(error, success) {
@@ -373,11 +336,15 @@ IOTA.prototype._addTrytes = function(bundle, signatureFragments) {
 
   var finalBundle = [];
   var message;
+  var emptySignatureFragment = '';
+  for (var j = 0; emptySignatureFragment.length < 2187; j++) {
+    emptySignatureFragment += '9';
+  }
 
   for (var i = 0; i < bundle.transactions.length; i++) {
 
     // Fill empty signatureMessageFragment
-    bundle.transactions[i].signatureMessageFragment = signatureFragments[i];
+    bundle.transactions[i].signatureMessageFragment = signatureFragments[i] ? signatureFragments[i] : emptySignatureFragment;
 
     // Fill empty trunkTransaction
     if (bundle.transactions[i].trunkTransaction === undefined) {
@@ -403,70 +370,10 @@ IOTA.prototype._addTrytes = function(bundle, signatureFragments) {
       bundle.transactions[i].nonce += '9';
     }
 
-    finalBundle.push(Utils.transactionTrytes(bundle.transactions[i]));
+    finalBundle.push(bundle.transactions[i]);
   }
 
   return finalBundle;
-}
-
-
-/**
-  * getsTrytes, analyzes, gets bundle hashes,
-  * findTransactions, trytes, analyzes
-  *
-**/
-IOTA.prototype.getBundle = function(transactions, inclusionStates, callback) {
-
-  var self = this;
-
-  self.getTrytes(transactions, function(error, trytes) {
-
-    if (!error) {
-
-      self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
-
-        var bundleHashes = new Set();
-        var bundleInclusions = {}
-        for (var i = 0; i < analyzed.length; i++) {
-          bundleHashes.add(analyzed[i].bundle);
-          bundleInclusions[analyzed[i].bundle] = inclusionStates[transactions.indexOf(analyzed[i].hash)]
-        }
-
-        var findTxs = {
-          'command': 'findTransactions',
-          'bundles': Array.from(bundleHashes)
-        }
-
-        self.sendRequest(findTxs, function(error, bundleTxs) {
-
-          self.getTrytes(bundleTxs.hashes, function(error, bundleTrytes) {
-
-            if (!error) {
-
-              return self.analyzeTransactions(bundleTrytes.trytes, function(error, analyzedBundles) {
-
-                var tailTransactions = [];
-                /**
-
-                  Bundle the bundles together (list of lists)
-
-                **/
-                for (var i = 0; i < analyzedBundles.length; i++) {
-                  analyzedBundles[i]['persistence'] = bundleInclusions[analyzedBundles[i].bundle];
-
-                  if (analyzedBundles[i].currentIndex === 0) {
-                    tailTransactions.push(analyzedBundles[i]);
-                  }
-                }
-
-                return callback(null, tailTransactions, analyzedBundles);
-              });
-            }
-          })
-        })
-      })
-    }
-  })
 }
 
 /**
@@ -484,7 +391,11 @@ IOTA.prototype.getInputs = function(valueToDeduct, inputList, index, callback) {
   }
 
 
-  self.getBalances(address, function(e, success) {
+  self.getBalances(Array(address), function(e, success) {
+
+    if (e) {
+      return callback(e);
+    }
 
     if (success.balances) {
 
@@ -547,6 +458,7 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
   // Add entries to the bundle
   var totalValue = 0;
   var signatureFragments = [];
+
   for (var i = 0; i < transfers.length; i++) {
     var timestamp = Math.floor(Date.now() / 1000);
 
@@ -556,11 +468,10 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
     // If message longer than 2187 trytes, increase signatureMessageLength
     if (transfers[i].message.length > 2187) {
       signatureMessageLength += Math.floor(transfers[i].message.length / 2187);
-      console.log("LENGTH: ", signatureMessageLength);
+
       var msgCopy = transfers[i].message;
 
       while (msgCopy) {
-        console.log(msgCopy.length);
         var fragment = msgCopy.slice(0, 2187);
         msgCopy = msgCopy.slice(2187, msgCopy.length);
 
@@ -605,7 +516,7 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
           var timestamp = Math.floor(Date.now() / 1000);
 
           // Add input as bundle entry
-          Utils.addEntry(bundle, 2, inputs[i].address, toSubtract, emptyTag, timestamp);
+          Utils.addEntry(bundle, securityLevel + 1, inputs[i].address, toSubtract, emptyTag, timestamp);
 
           // Add extra output to send remaining funds to
           if (thisBalance > totalValue) {
@@ -613,17 +524,18 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
             var remainder = thisBalance - totalValue;
 
             // Generate a new Address
-            var key = self._key(Utils.trits(seed), self.addresses.length, 1);
+            var key = self._key(Utils.trits(seed), self.addresses.length, 2);
             var digests = self._digests(key);
             var addressTrits = self._address(digests);
-            var address = Utils.trits(addressTrits);
+            var address = Utils.trytes(addressTrits);
 
             self.addresses.push(address);
 
             var emptyTag = '999999999999999999999999999';
             var timestamp = Math.floor(Date.now() / 1000);
 
-            Utils.addEntry(bundle, 2, address, remainder, emptyTag, timestamp);
+            // Remainder bundle entry
+            Utils.addEntry(bundle, 1, address, remainder, emptyTag, timestamp);
           } else {
 
             totalValue -= thisBalance;
@@ -638,15 +550,36 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
             var thisAddress = finalBundle[i].address;
             var keyIndex = self.addresses.indexOf(thisAddress);
             var bundleHash = finalBundle[i].bundle;
-            var key = self._key(seed, keyIndex, securityLevel);
 
-            var keyFragment = key.slice(securityLevel * 2187, (1 + securityLevel) * 2187);
+            var key = self._key(Utils.trits(seed), keyIndex, 2);
 
-            finalBundle[i].signatureMessageFragment = Utils.signatureFragment(Utils.normalizedBundle(bundleHash), keyFragment);
+            var firstFragment = key.slice(0,  6561);
+
+            var firstSignedFragment = Utils.signatureFragment(Utils.normalizedBundle(bundleHash), firstFragment);
+
+            finalBundle[i].signatureMessageFragment = Utils.trytes(firstSignedFragment);
+
+            // Find remainder tx and sign it
+            for (var j = 0; j < finalBundle.length; j++) {
+              if (finalBundle[j].address === thisAddress && finalBundle[j].value === 0) {
+                var firstFragment = key.slice(6561,  2 * 6561);
+
+                var firstSignedFragment = Utils.signatureFragment(Utils.normalizedBundle(bundleHash), firstFragment);
+
+                finalBundle[j].signatureMessageFragment = Utils.trytes(firstSignedFragment);
+              }
+            }
           }
         }
 
-        return callback(null, finalBundle);
+        //console.log("566", JSON.stringify(finalBundle));
+
+        var txTrytes = []
+        finalBundle.forEach(function(tx) {
+          txTrytes.push(Utils.transactionTrytes(tx))
+        })
+
+        return callback(null, txTrytes.reverse());
 
       } else {
 
@@ -659,6 +592,8 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
 
     Utils.finalize(bundle);
     var finalBundle = self._addTrytes(bundle, signatureFragments);
+
+    var finalBundle = Array(Utils.transactionTrytes(finalBundle[0]));
     return callback(null, finalBundle);
   }
 }
@@ -675,36 +610,35 @@ IOTA.prototype.transfer = function(seed, transfers, callback) {
     if (error) {
       return callback("ERROR")
     }
-    console.log("Prepared Trytes", trytes)
-    // Get latest milestone
-    self.getMilestone(function(error, milestone) {
+    console.log("Prepared Trytes", JSON.stringify(trytes))
+
+    // Get branch and trunk
+    self.getTransactionsToApprove(27, function(error, toApprove) {
+
       if (error) {
-        return callback("ERROR")
+        return callback(error)
       }
 
-      console.log("Got Milestone", milestone.milestone)
-      // Get branch and trunk
-      self.getTransactionsToApprove(milestone.milestone, function(error, toApprove) {
-
+      console.log("Got transactions to approve", toApprove);
+      // attach to tangle - do pow
+      self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
         if (error) {
-          return callback(error)
+          return callback("ERROR")
         }
 
-        console.log("Got transactions to approve", toApprove);
-        // attach to tangle - do pow
-        self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
-          if (error) {
-            return callback("ERROR")
+        self.analyzeTransactions(attached.trytes, function(e, analyzed) {
+          console.log(JSON.stringify(analyzed));
+        })
+
+        console.log("Attached to Tangle. Broadcasting and Storing now");
+        // Broadcast and store tx
+        self.broadcastAndStore(attached.trytes, function(error, success) {
+
+          if (!error) {
+            self.analyzeTransactions(attached.trytes, function(error, analyzed) {
+              return callback(null, analyzed);
+            })
           }
-
-          console.log("Attached to Tangle. Broadcasting and Storing now");
-          // Broadcast and store tx
-          self.broadcastAndStore(attached.trytes, function(error, success) {
-
-            if (!error) {
-              return callback(null, success);
-            }
-          })
         })
       })
     })
@@ -720,7 +654,7 @@ IOTA.prototype.getNewAddress = function(seed, cb) {
 
   console.log("getNewAddress: index #", self.addresses.length);
 
-  var key = self._key(Utils.trits(seed), self.addresses.length, 1);
+  var key = self._key(Utils.trits(seed), self.addresses.length, 2);
   var digests = self._digests(key);
   var addressTrits = self._address(digests);
   var address = Utils.trytes(addressTrits)
@@ -746,6 +680,67 @@ IOTA.prototype.getNewAddress = function(seed, cb) {
 }
 
 /**
+  * getsTrytes, analyzes, gets bundle hashes,
+  * findTransactions, trytes, analyzes
+  *
+**/
+IOTA.prototype.getBundle = function(transactions, inclusionStates, callback) {
+
+  var self = this;
+
+  self.getTrytes(transactions, function(error, trytes) {
+
+    if (!error) {
+
+      self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
+
+        var bundleHashes = new Set();
+        var bundleInclusions = {}
+        for (var i = 0; i < analyzed.length; i++) {
+          bundleHashes.add(analyzed[i].bundle);
+          bundleInclusions[analyzed[i].bundle] = inclusionStates[transactions.indexOf(analyzed[i].hash)]
+        }
+
+        var findTxs = {
+          'command': 'findTransactions',
+          'bundles': Array.from(bundleHashes)
+        }
+
+        self.sendRequest(findTxs, function(error, bundleTxs) {
+
+          self.getTrytes(bundleTxs.hashes, function(error, bundleTrytes) {
+
+            if (!error) {
+
+              return self.analyzeTransactions(bundleTrytes.trytes, function(error, analyzedBundles) {
+
+                var tailTransactions = [];
+                var nonTailTransactions = [];
+
+                // Add persistence
+                for (var i = 0; i < analyzedBundles.length; i++) {
+                  analyzedBundles[i]['persistence'] = bundleInclusions[analyzedBundles[i].bundle];
+
+                  // Sort bundle by tail and non-tail
+                  if (analyzedBundles[i].currentIndex === 0) {
+                    tailTransactions.push(analyzedBundles[i]);
+                  } else {
+                    nonTailTransactions.push(analyzedBundles[i]);
+                  }
+                }
+
+                return callback(null, tailTransactions, nonTailTransactions);
+              });
+            }
+          })
+        })
+      })
+    }
+  })
+}
+
+
+/**
   *
   *
 **/
@@ -762,17 +757,49 @@ IOTA.prototype.getTransfers = function(seed, callback) {
 
         if (!err) {
 
-          // get inclusion states
-          self.getMilestone(function(err, milestone) {
-            self.getInclusionStates(milestone.milestone, transactions.hashes, function(err, inclusionStates) {
+          // Get latest milestone
+          self.getNodeInfo(function(error, nodeInfo) {
+            // get inclusion states
+            self.getInclusionStates(nodeInfo.latestSolidSubtangleMilestone, transactions.hashes, function(err, inclusionStates) {
 
               if (!err) {
 
-                self.getBundle(transactions.hashes, inclusionStates.states, function(error, tailTransactions, bundles) {
+                self.getBundle(transactions.hashes, inclusionStates.states, function(error, tails, nonTails) {
 
+                  // Main credit: http://stackoverflow.com/a/8837505
+                  // Sort tails by timestamp
+                  tails.sort(function(a, b) {
+                      var x = parseInt(a['timestamp']); var y = parseInt(b['timestamp']);
+                      return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+                  });
 
+                  // TODO: Check if replayed transfer
 
-                  // SOME COMPLICATED SHIT HERE
+                  var bundleArray = [];
+
+                  tails.forEach(function(tail) {
+                    bundleArray.push(Array(tail));
+
+                    var tailHash = tail.bundle;
+
+                    // Add non tails to bundle array
+                    nonTails.forEach(function(el) {
+
+                      var nonTailHash = el.bundle;
+
+                      if (tailHash === nonTailHash) {
+                        bundleArray[bundleArray.length - 1].push(el);
+                      }
+                    })
+
+                    // Sort by index
+                    bundleArray[bundleArray.length - 1].sort(function(a, b) {
+                        var x = parseInt(a['currentIndex']); var y = parseInt(b['currentIndex']);
+                        return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+                    });
+                  })
+
+                  return callback(null, bundleArray);
                 })
               }
             })

@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Nostalgia 2.0</title>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 <script type="text/javascript" src="js/converter.js"></script>
 <script type="text/javascript" src="js/curl.js"></script>
 <script type="text/javascript" src="js/utils.js"></script>
@@ -19,18 +21,65 @@
                 console.log("Prepared Address: ", address);
                 if (!error) {
 
-                  transfer(success, function(error, success) {
-                    console.log(error, success);
+                  transfer(success, function(error, transaction) {
                     iotajs.addresses.push(address);
+                    genAddressCallback(transaction);
                   });
                 }
               })
             }
 
+            function genAddressCallback(transaction) {
+              var content = addElementToTable(true, transaction);
+
+              $('#txTable tr:nth-last-child(2)').before(content);
+            }
+
+            function addElementToTable(isAddition, bundles) {
+
+              var txValue = 0;
+              var content = '';
+              var totalValue = 0;
+
+              bundles.forEach(function(bundleEl) {
+
+                // Persistence has to be 100
+                // Has to be output (value above 0)
+                // Should be a an address associated with seed
+                console.log(bundleEl);
+                if (bundleEl.persistence && bundleEl.value > 0 && iotajs.addresses.indexOf(bundleEl.address) > -1) {
+                    totalValue += parseInt(bundleEl.value);
+                }
+
+                var persistence = bundles[0].persistence ? bundles[0].persistence : false;
+
+                if (bundleEl.currentIndex === 0) {
+                  var getBundleBtn = '';
+                  if (bundles.length > 1) {
+                    getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].bundle + "' type='button' class='btn btn-primary'>Show bundle</button>";
+                  }
+
+                  content += "<tr><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
+
+
+                } else {
+                  content += "<tr class='collapse out " + bundles[0].bundle + " info'>";
+                  content += "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
+                }
+
+              })
+
+              if (isAddition) {
+                return content;
+              } else {
+                return [content, totalValue];
+              }
+
+            }
+
             function transfer(address, callback) {
               if (address) {
 
-                //DO STUFF HERE: prepare, getTxToApprove, attachToTangle, broadcast, store
                 var transfers = [{
                   'address': address,
                   'value': 0,
@@ -47,51 +96,70 @@
                 } else {
                   valueToTransfer = prompt("Value to transfer to '" + address + "'");
                   if (valueToTransfer == null || isNaN(valueToTransfer)) {
-                      alert("The transfer has been canceled!");
+                    alert("The transfer has been canceled!");
                   } else {
-                      alert("This will take a few minutes to complete!");
-                      sendRequest("{'command': 'transfer', 'seed': '" + seed + "', 'securityLevel': 1, 'address': '" + address + "', 'value': '" + valueToTransfer + "', 'message': '', 'minWeightMagnitude': 13}", transferCallback);
+
+                    message = prompt("Message (can be empty): ");
+                    tag = prompt("Tag for your Tx (can be empty): ")
+
+                    var transfers = [{
+                      'address': address,
+                      'value': parseInt(valueToTransfer),
+                      'message': message,
+                      'tag': tag
+                    }]
+
+                    alert("This will take a few minutes to complete!");
+                    iotajs.transfer(seed, transfers, transferCallback);
                   }
                 }
               }
             }
 
-            function transferCallback(json) {
-                if (json.tail != null) {
-                    alert("The transfer has been broadcast via " + json.neighbors + " neighbors.");
-                } else {
-                    alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
-                }
+            function transferCallback(error, transaction) {
+              if (error) {
+                alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
+              } else {
+                alert("The transfer has been broadcast.");
+
+                var content = addElementToTable(true, transaction);
+
+                $('#txTable tr:nth-last-child(2)').before(content);
+              }
             }
 
-
             function getTransfers() {
-              iotajs.getTransfers(seed, function(error, success) {
-                console.log(error, success);
+              iotajs.getTransfers(seed, function(error, bundles) {
+                if (!error) {
+                  getTransfersCallback(bundles);
+                }
               })
             }
 
-            function getTransfersCallback(json) {
-                var totalValue = 0, content = "", i;
-                for (i = 0; i < json.transfers.length; i++) {
-                    if (json.transfers[i].persistence > 90) {
-                        totalValue += parseInt(json.transfers[i].value);
-                    }
+            function getTransfersCallback(bundles) {
 
-                    showBundle(json.transfers[i].hash, function(error, success) {
+              var totalValue = 0, i;
+              var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
+              for (i = 0; i < bundles.length; i++) {
+                var tableElements = addElementToTable(false, bundles[i])
+                content += tableElements[0];
+                totalValue += tableElements[1];
+              }
 
-                    });
+              content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+              content += "<tr><td><button type='button' class='btn btn-primary' onclick='sendMessage();'>Send Message</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
 
-                    content += "<tr><td>" + new Date(json.transfers[i].timestamp * 1000) + "</td><td id='" + json.transfers[i].hash + "'>" + json.transfers[i].address + "</td><td>" + json.transfers[i].value + "</td><td><button onclick=\"showBundle('" + json.transfers[i].hash + "');\">Show bundle</button></td><td><button onclick=\"replayTransfer('" + json.transfers[i].hash + "');\">" + json.transfers[i].persistence +"%</button></td></tr>";
-                }
-                content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-                content += "<tr><td><button onclick='claimIotas();'>Claim iotas</button></td><td><button onclick='generateNewAddress();'>Generate new address</button></td><td><button onclick='transfer();'>Transfer iotas</button></td><td><button onclick='refreshPage();'>Refresh page</button></td></tr>";
-                document.body.innerHTML = "<table border='1'>" + content + "</table>";
+
+              document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
             }
 
             function refreshPage() {
-                //getTransfers();
-                getTransfersCallback({'transfers': []})
+              var totalValue = 0;
+              var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
+              content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+              content += "<tr><td><button type='button' class='btn btn-primary' onclick='sendMessage();'>Send Message</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+              document.body.innerHTML = "<table class='table' id='txTable'> " + content + "</table>";
+              getTransfers();
             }
 
             function setSeed(value) {
@@ -107,30 +175,14 @@
                 while (seed.length < 81) {
                     seed += "9";
                 }
-            }
-
-            function showBundle(transaction, cb2) {
-                sendRequest("{'command': 'getBundle', 'transaction': '" + transaction + "'}", showBundleCallback, cb2);
-            }
-
-            function showBundleCallback(json, cb) {
-                var content = "";
-                for (i = 0; i < json.transactions.length; i++) {
-                  if (json.transactions[i].address === 'PWZUJAMZTAUFTMWZVQYJAKAMBLDUFUAQSTRZUBAUTAOXZRXSF9KCEEWPOQWYLVPDBJZHWAYPEQRPJJYDK') {
-                    console.log("SUCCESS", json.transactions[i].hash);
-                  }
-                  content += json.transactions[i].address + " = " + json.transactions[i].value + "\r\n";
+                if (seed.length > 81) {
+                  seed = seed.slice(0, 81);
                 }
-
-                var id = "#" + json.transactions[0].hash
-                $(id).html(content)
-
-                return cb(null, true);
             }
         </script>
 </head>
 <body>
-    <table>
+    <table class="table">
         <tr>
             <td>
                 <input type="password" id="seed" placeholder="Seed" onkeydown="if (event.keyCode == 13) { setSeed(value.toUpperCase()); refreshPage(); }" />
