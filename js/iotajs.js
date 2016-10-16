@@ -552,21 +552,31 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
             var bundleHash = finalBundle[i].bundle;
 
             var key = self._key(Utils.trits(seed), keyIndex, 2);
+            var digests = self._digests(key);
+            var addressTrits = self._address(digests);
+            var address = Utils.trytes(addressTrits)
+            console.log(keyIndex, thisAddress);
+            console.log("Address for signing: ", address);
 
             var firstFragment = key.slice(0,  6561);
 
-            var firstSignedFragment = Utils.signatureFragment(Utils.normalizedBundle(bundleHash), firstFragment);
+            var normalizedBundleHash = Utils.normalizedBundle(bundleHash);
+            var firstBundleFragment = normalizedBundleHash.slice(0, 27);
+
+            var firstSignedFragment = Utils.signatureFragment(firstBundleFragment, firstFragment);
 
             finalBundle[i].signatureMessageFragment = Utils.trytes(firstSignedFragment);
 
             // Find remainder tx and sign it
             for (var j = 0; j < finalBundle.length; j++) {
               if (finalBundle[j].address === thisAddress && finalBundle[j].value === 0) {
-                var firstFragment = key.slice(6561,  2 * 6561);
+                var secondFragment = key.slice(6561,  2 * 6561);
 
-                var firstSignedFragment = Utils.signatureFragment(Utils.normalizedBundle(bundleHash), firstFragment);
+                var secondBundleFragment = normalizedBundleHash.slice(27, 27 * 2);
 
-                finalBundle[j].signatureMessageFragment = Utils.trytes(firstSignedFragment);
+                var secondSignedFragment = Utils.signatureFragment(secondBundleFragment, secondFragment);
+
+                finalBundle[j].signatureMessageFragment = Utils.trytes(secondSignedFragment);
               }
             }
           }
@@ -665,7 +675,7 @@ IOTA.prototype.getNewAddress = function(seed, cb) {
   }
 
   self.sendRequest(findTxs, function(error, success) {
-
+    console.log(error, success)
     if (success.hashes.length > 0) {
 
       // Add to cached address list
@@ -749,7 +759,7 @@ IOTA.prototype.getTransfers = function(seed, callback) {
 
   // Populate addresses list with already used addresses
   self.getNewAddress(seed, function(error, success) {
-
+    console.log(error, success);
     if (!error) {
 
       // find all associated transactions with the addresses

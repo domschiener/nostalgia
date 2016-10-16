@@ -46,7 +46,6 @@
                 // Persistence has to be 100
                 // Has to be output (value above 0)
                 // Should be a an address associated with seed
-                console.log(bundleEl);
                 if (bundleEl.persistence && bundleEl.value > 0 && iotajs.addresses.indexOf(bundleEl.address) > -1) {
                     totalValue += parseInt(bundleEl.value);
                 }
