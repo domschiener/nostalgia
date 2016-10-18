@@ -79,7 +79,29 @@ IOTA.prototype._address = function(digests) {
     return address;
 }
 
+/**
+  *
+  *
+**/
+IOTA.prototype.digest = function(normalizedBundleFragment, signatureFragment) {
+  var buffer = [], state = [], state2 = [];
 
+  Utils.initialize(state);
+  for (var i = 0; i< 27; i++) {
+    buffer = signatureFragment.slice(i * 243, (i + 1) * 243);
+
+    for (var j = normalizedBundleFragment[i] + 13; j-- > 0; ) {
+      Utils.initialize(state2);
+      Utils.absorb(buffer, state2);
+      Utils.squeeze(buffer, state2);
+    }
+
+    Utils.absorb(buffer, state);
+  }
+
+  Utils.squeeze(buffer, state);
+  return buffer;
+}
 
 /**
   *
@@ -290,6 +312,8 @@ IOTA.prototype.getInclusionStates = function(milestone, transactions, callback) 
 **/
 IOTA.prototype.getTrytes = function(transactions, callback) {
 
+  if (typeof transactions === 'string') transactions = Array(transactions);
+
   var command = {
     'command': 'getTrytes',
     'hashes': transactions
@@ -376,6 +400,63 @@ IOTA.prototype._addTrytes = function(bundle, signatureFragments) {
   return finalBundle;
 }
 
+IOTA.prototype.attachAndMore = function(trytes, callback) {
+
+  var self = this;
+
+  // Get branch and trunk
+  self.getTransactionsToApprove(27, function(error, toApprove) {
+
+    if (error) {
+      return callback(error)
+    }
+
+    console.log("Got transactions to approve", toApprove);
+    // attach to tangle - do pow
+    self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
+      if (error) {
+        return callback("ERROR")
+      }
+
+      self.analyzeTransactions(attached.trytes, function(e, analyzed) {
+        console.log(JSON.stringify(analyzed));
+      })
+
+      console.log("Attached to Tangle. Broadcasting and Storing now");
+      // Broadcast and store tx
+      self.broadcastAndStore(attached.trytes, function(error, success) {
+
+        if (!error) {
+          self.analyzeTransactions(attached.trytes, function(error, analyzed) {
+            return callback(null, analyzed);
+          })
+        }
+      })
+    })
+  })
+}
+
+/**
+  *
+  *
+**/
+IOTA.prototype.replayTransfer = function(bundleHash, callback) {
+
+  var self = this;
+  self.getBundle(bundleHash, function(error, bundle) {
+
+    if (error) return callback(error);
+
+    // Get the trytes of all the bundle objects
+    var bundleTrytes = [];
+    bundle.forEach(function(bundleTx) {
+      bundleTrytes.push(Utils.transactionTrytes(bundleTx));
+    })
+
+    self.attachAndMore(trytes, callback);
+  })
+}
+
 /**
   *
   *
@@ -455,9 +536,9 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
   var self = this;
   var bundle = Utils.bundle();
 
-  // Add entries to the bundle
   var totalValue = 0;
   var signatureFragments = [];
+  var tag;
 
   for (var i = 0; i < transfers.length; i++) {
     var timestamp = Math.floor(Date.now() / 1000);
@@ -475,6 +556,7 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
         var fragment = msgCopy.slice(0, 2187);
         msgCopy = msgCopy.slice(2187, msgCopy.length);
 
+        // Pad remainder of fragment
         for (var j = 0; fragment.length < 2187; j++) {
           fragment += '9';
         }
@@ -482,12 +564,13 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
         signatureFragments.push(fragment);
       }
     } else {
+      // Else, get single fragment with 2187 of 9's trytes
       var fragment = '';
 
       if (transfers[i].message) {
         fragment = transfers[i].message.slice(0, 2187)
       }
-
+      console.log(fragment);
       for (var j = 0; fragment.length < 2187; j++) {
         fragment += '9';
       }
@@ -495,13 +578,20 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
       signatureFragments.push(fragment);
     }
 
-    var tag = transfers[i].tag ? transfers[i].tag : '999999999999999999999999999';
+    // If no tag defined, get 27 tryte tag.
+    tag = transfers[i].tag ? transfers[i].tag : '999999999999999999999999999';
 
+    // Pad for required 27 tryte length
+    for (var j = 0; tag.length < 27; j++) {
+      tag += '9';
+    }
+
+    // Add first entry to the bundle
     Utils.addEntry(bundle, signatureMessageLength, transfers[i].address, transfers[i].value, tag, timestamp)
     totalValue += parseInt(transfers[i].value);
   }
 
-  // Get Inputs
+  // Get inputs if we are sending tokens
   if (totalValue) {
 
     self.getInputs(totalValue, [], 0, function(error, inputs) {
@@ -512,11 +602,10 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
 
           var thisBalance = inputs[i].balance;
           var toSubtract = 0 - thisBalance;
-          var emptyTag = '999999999999999999999999999';
           var timestamp = Math.floor(Date.now() / 1000);
 
           // Add input as bundle entry
-          Utils.addEntry(bundle, securityLevel + 1, inputs[i].address, toSubtract, emptyTag, timestamp);
+          Utils.addEntry(bundle, securityLevel + 1, inputs[i].address, toSubtract, tag, timestamp);
 
           // Add extra output to send remaining funds to
           if (thisBalance > totalValue) {
@@ -531,11 +620,10 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
 
             self.addresses.push(address);
 
-            var emptyTag = '999999999999999999999999999';
             var timestamp = Math.floor(Date.now() / 1000);
 
             // Remainder bundle entry
-            Utils.addEntry(bundle, 1, address, remainder, emptyTag, timestamp);
+            Utils.addEntry(bundle, 1, address, remainder, tag, timestamp);
           } else {
 
             totalValue -= thisBalance;
@@ -622,36 +710,7 @@ IOTA.prototype.transfer = function(seed, transfers, callback) {
     }
     console.log("Prepared Trytes", JSON.stringify(trytes))
 
-    // Get branch and trunk
-    self.getTransactionsToApprove(27, function(error, toApprove) {
-
-      if (error) {
-        return callback(error)
-      }
-
-      console.log("Got transactions to approve", toApprove);
-      // attach to tangle - do pow
-      self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
-        if (error) {
-          return callback("ERROR")
-        }
-
-        self.analyzeTransactions(attached.trytes, function(e, analyzed) {
-          console.log(JSON.stringify(analyzed));
-        })
-
-        console.log("Attached to Tangle. Broadcasting and Storing now");
-        // Broadcast and store tx
-        self.broadcastAndStore(attached.trytes, function(error, success) {
-
-          if (!error) {
-            self.analyzeTransactions(attached.trytes, function(error, analyzed) {
-              return callback(null, analyzed);
-            })
-          }
-        })
-      })
-    })
+    self.attachAndMore(trytes, callback);
   })
 }
 
@@ -690,65 +749,226 @@ IOTA.prototype.getNewAddress = function(seed, cb) {
 }
 
 /**
-  * getsTrytes, analyzes, gets bundle hashes,
-  * findTransactions, trytes, analyzes
-  *
+  *   @method traverseBundle
+  *   @param {string} trunkTx Hash of a trunk or a tail transaction  of a bundle
+  *   @param {string} bundleHash
+  *   @param {list} bundle List of bundle objects to be populated
+  *   @returns {list} bundle Transaction objects
 **/
-IOTA.prototype.getBundle = function(transactions, inclusionStates, callback) {
+IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) {
 
   var self = this;
+  // Get trytes of transaction hash
+  self.getTrytes(trunkTx, function(error, trytes) {
 
-  self.getTrytes(transactions, function(error, trytes) {
+    if (error) return callback(error);
 
-    if (!error) {
+    // Get transaction object
+    self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
 
-      self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
+      if (error) return callback(error);
 
-        var bundleHashes = new Set();
-        var bundleInclusions = {}
-        for (var i = 0; i < analyzed.length; i++) {
-          bundleHashes.add(analyzed[i].bundle);
-          bundleInclusions[analyzed[i].bundle] = inclusionStates[transactions.indexOf(analyzed[i].hash)]
-        }
+      // If not tail, get tail and return bundle
+      if (!bundleHash && analyzed[0].currentIndex !== 0) {
+        self.tailFromBundle(analyzed[0].bundle, callback);
+      }
 
-        var findTxs = {
-          'command': 'findTransactions',
-          'bundles': Array.from(bundleHashes)
-        }
+      // If no bundle hash, define it
+      if (!bundleHash) {
+        bundleHash = analyzed[0].bundle;
+      }
 
-        self.sendRequest(findTxs, function(error, bundleTxs) {
+      // If different bundle hash, return with bundle
+      if (bundleHash !== analyzed[0].bundle) {
+        return callback(null, bundle);
+      }
 
-          self.getTrytes(bundleTxs.hashes, function(error, bundleTrytes) {
-
-            if (!error) {
-
-              return self.analyzeTransactions(bundleTrytes.trytes, function(error, analyzedBundles) {
-
-                var tailTransactions = [];
-                var nonTailTransactions = [];
-
-                // Add persistence
-                for (var i = 0; i < analyzedBundles.length; i++) {
-                  analyzedBundles[i]['persistence'] = bundleInclusions[analyzedBundles[i].bundle];
-
-                  // Sort bundle by tail and non-tail
-                  if (analyzedBundles[i].currentIndex === 0) {
-                    tailTransactions.push(analyzedBundles[i]);
-                  } else {
-                    nonTailTransactions.push(analyzedBundles[i]);
-                  }
-                }
-
-                return callback(null, tailTransactions, nonTailTransactions);
-              });
-            }
-          })
-        })
-      })
-    }
+      // Define new trunkTransaction for search
+      var trunkTx = analyzed[0].trunkTransaction;
+      // Add transaction object to bundle
+      bundle.push(analyzed[0]);
+      // Continue traversing with new trunkTx
+      self.traverseBundle(trunkTx, bundleHash, bundle, callback);
+    })
   })
 }
 
+/**
+  *
+  *
+**/
+IOTA.prototype.validateSignatures = function(expectedAddress, signatureFragments, bundleHash) {
+
+  var self = this;
+
+  var normalizedBundleFragments = [];
+  var normalizedBundleHash = Utils.normalizedBundle(bundleHash);
+  // Split hash into 3 fragments
+  for (var i = 0; i < 3; i++) {
+    normalizedBundleFragments[i] = normalizedBundleHash.slice(i * 27, (i + 1) * 27);
+  }
+
+  // Get digests
+  var digests = [];
+  for (var i = 0; i < signatureFragments.length; i++) {
+    var digestBuffer = self.digest(normalizedBundleFragments[i % 3], Utils.trits(signatureFragments[i]));
+
+    for (var j = 0; j < 243; j++) {
+      digests[i * 243 + j] = digestBuffer[j]
+    }
+  }
+
+  var address = Utils.trytes(self._address(digests));
+
+  return (expectedAddress === address);
+}
+
+/**
+  *
+  *
+**/
+IOTA.prototype.tailFromBundle = function(bundleHash, callback) {
+
+  var self = this;
+
+  // Search transactions with the same bundle hash
+  var findTransactions = {
+    'command': 'findTransactions',
+    'bundles': [bundleHash]
+  }
+
+  self.sendRequest(findTransactions, function(e, transactions) {
+
+    // Get trytes of transaction hash
+    self.getTrytes(transactions.hashes, function(error, trytes) {
+
+      if (error) return callback(error);
+
+      // Get transaction object
+      self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
+
+        var tailTransactions = [];
+
+        analyzed.forEach(function(tx) {
+          if (tx.currentIndex === 0) {
+            tailTransactions.push(tx.hash);
+          }
+        })
+
+        // If multiple tail transactions, get the valid one
+        if (tailTransactions.length > 1) {
+          async.mapSeries(tailTransactions, function(txHash, callback) {
+            self.getBundle(txHash, function(error, bundle) {
+              if (bundle) {
+                return callback(null, bundle)
+              }
+            })
+          })
+        } else {
+          // If only one tail transaction, return it
+          self.getBundle(txHash, function(error, bundle) {
+            if (bundle) {
+              return callback(null, bundle)
+            }
+          })
+        }
+      })
+    })
+  })
+}
+
+/**
+  * Gets the associated bundle transactions of a single transaction
+  * Does validation of signatures, total sum as well as order
+
+  *   @method getBundle
+  *   @param {string} transaction Hash of a tail transaction
+  *   @returns {list} bundle Transaction objects
+**/
+IOTA.prototype.getBundle = function(transaction, callback) {
+
+  var self = this;
+  self.traverseBundle(transaction, null, [], function(error, bundle) {
+
+    if (error) return callback(error);
+
+    /**
+          Validity Check Functions
+    **/
+
+    var totalSum = 0, lastIndex, bundleHash;
+
+    // Prepare to absorb txs and get bundleHash
+    var bundleFromTxs = [], state = [];
+    Utils.initialize(state);
+
+    // Prepare for signature validation
+    var signaturesToValidate = [];
+
+    bundle.forEach(function(bundleTx, index) {
+      totalSum += bundleTx.value;
+
+      if (!lastIndex) {
+        lastIndex = bundleTx.lastIndex;
+        bundleHash = bundleTx.bundle;
+      } else {
+
+        // Check if (lastIndex + 1) is the same as the total sum of txs in the bundle
+        if (bundleTx.lastIndex !== lastIndex) return callback(new Error("Invalid Bundle Length"));
+      }
+      var thisTxTrytes = Utils.transactionTrytes(bundleTx);
+      // Absorb bundle hash + value + timestamp + lastIndex + currentIndex trytes.
+      Utils.absorb(Utils.trits(thisTxTrytes.slice(2187, 2187 + 162)), state)
+
+      // Check if input transaction
+      if (bundleTx.value < 0) {
+        var thisAddress = bundleTx.address;
+
+        var newSignatureToValidate = {
+          'address': thisAddress,
+          'signatureFragments': Array(bundleTx.signatureMessageFragment)
+        }
+
+        for (var i = index; i < bundle.length - 1; i++) {
+          var newBundleTx = bundle[i + 1];
+
+          // Check if new tx is part of the signature fragment
+          if (newBundleTx.address === thisAddress && newBundleTx.value === 0) {
+            newSignatureToValidate.signatureFragments.push(newBundleTx.signatureMessageFragment);
+          } else {
+            // TODO: BREAK ???
+          }
+        }
+
+        signaturesToValidate.push(newSignatureToValidate);
+      }
+    });
+
+    // Check for total sum, if not equal 0 throw error
+    if (totalSum !== 0) return callback(new Error("Invalid Bundle Sum"));
+
+    Utils.squeeze(bundleFromTxs, state);
+    var bundleFromTxs = Utils.trytes(bundleFromTxs);
+
+    // Check if bundle hash is the same as returned by tx object
+    if (bundleFromTxs !== bundleHash) return callback(new Error("Invalid Bundle Hash"));
+
+
+
+    // TODO Last tx should have lastIndex = currentIndex
+
+
+
+    // Validate the signatures
+    for (var i = 0; i < signaturesToValidate.length; i++) {
+      var isValidSignature = self.validateSignatures(signaturesToValidate[i].address, signaturesToValidate[i].signatureFragments, bundleHash);
+
+      if (!isValidSignature) return callback("Invalid Signatures!");
+    }
+
+    return callback(null, bundle);
+  })
+}
 
 /**
   *
@@ -759,7 +979,7 @@ IOTA.prototype.getTransfers = function(seed, callback) {
 
   // Populate addresses list with already used addresses
   self.getNewAddress(seed, function(error, success) {
-    console.log(error, success);
+
     if (!error) {
 
       // find all associated transactions with the addresses
@@ -771,45 +991,36 @@ IOTA.prototype.getTransfers = function(seed, callback) {
           self.getNodeInfo(function(error, nodeInfo) {
             // get inclusion states
             self.getInclusionStates(nodeInfo.latestSolidSubtangleMilestone, transactions.hashes, function(err, inclusionStates) {
-
               if (!err) {
+                console.log(JSON.stringify(inclusionStates));
+                // For each transaction do getBundle
+                // Then associate inclusion states with the entire bundle
+                async.map(transactions.hashes, function(txHash, callback) {
 
-                self.getBundle(transactions.hashes, inclusionStates.states, function(error, tails, nonTails) {
+                  self.getBundle(txHash, function(e, bundle) {
+                    callback(null, bundle)
+                  })
+                }, function(error, results) {
 
-                  // Main credit: http://stackoverflow.com/a/8837505
-                  // Sort tails by timestamp
-                  tails.sort(function(a, b) {
-                      var x = parseInt(a['timestamp']); var y = parseInt(b['timestamp']);
+                  results = results.filter(function(n){ return n != undefined });
+                  // credit: http://stackoverflow.com/a/8837505
+                  // Sort by timestamp
+                  results.sort(function(a, b) {
+                      var x = parseInt(a[0]['timestamp']); var y = parseInt(b[0]['timestamp']);
                       return ((x < y) ? -1 : ((x > y) ? 1 : 0));
                   });
 
-                  // TODO: Check if replayed transfer
-
-                  var bundleArray = [];
-
-                  tails.forEach(function(tail) {
-                    bundleArray.push(Array(tail));
-
-                    var tailHash = tail.bundle;
-
-                    // Add non tails to bundle array
-                    nonTails.forEach(function(el) {
-
-                      var nonTailHash = el.bundle;
-
-                      if (tailHash === nonTailHash) {
-                        bundleArray[bundleArray.length - 1].push(el);
-                      }
+                  results.forEach(function(bundle) {
+                    var hash = bundle[0].hash;
+                    var index = transactions.hashes.indexOf(hash);
+                    var inclusionState = inclusionStates.states[index];
+                    console.log(inclusionState);
+                    bundle.forEach(function(bundleTx) {
+                      bundleTx['persistence'] = inclusionState;
                     })
-
-                    // Sort by index
-                    bundleArray[bundleArray.length - 1].sort(function(a, b) {
-                        var x = parseInt(a['currentIndex']); var y = parseInt(b['currentIndex']);
-                        return ((x < y) ? -1 : ((x > y) ? 1 : 0));
-                    });
                   })
 
-                  return callback(null, bundleArray);
+                  return callback(null, results);
                 })
               }
             })
