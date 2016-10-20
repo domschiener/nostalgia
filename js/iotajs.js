@@ -449,11 +449,11 @@ IOTA.prototype.replayTransfer = function(bundleHash, callback) {
 
     // Get the trytes of all the bundle objects
     var bundleTrytes = [];
-    bundle.forEach(function(bundleTx) {
+    bundle[0].forEach(function(bundleTx) {
       bundleTrytes.push(Utils.transactionTrytes(bundleTx));
     })
 
-    self.attachAndMore(trytes, callback);
+    self.attachAndMore(bundleTrytes.reverse(), callback);
   })
 }
 
@@ -570,7 +570,7 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
       if (transfers[i].message) {
         fragment = transfers[i].message.slice(0, 2187)
       }
-      console.log(fragment);
+
       for (var j = 0; fragment.length < 2187; j++) {
         fragment += '9';
       }
@@ -755,7 +755,7 @@ IOTA.prototype.getNewAddress = function(seed, cb) {
   *   @param {list} bundle List of bundle objects to be populated
   *   @returns {list} bundle Transaction objects
 **/
-IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) {
+IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, index, directCallback, callback) {
 
   var self = this;
   // Get trytes of transaction hash
@@ -767,10 +767,14 @@ IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) 
     self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
 
       if (error) return callback(error);
+      console.log(analyzed);
+      console.log(bundleHash, bundle);
+      console.log(bundle.length);
 
       // If not tail, get tail and return bundle
-      if (!bundleHash && analyzed[0].currentIndex !== 0) {
-        self.tailFromBundle(analyzed[0].bundle, callback);
+      if (!bundleHash && bundle.length === 0 && analyzed[0].currentIndex !== 0) {
+        console.log("HERE NOW", trunkTx, bundleHash);
+        return self.tailFromBundle(analyzed[0].bundle, directCallback);
       }
 
       // If no bundle hash, define it
@@ -780,15 +784,23 @@ IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) 
 
       // If different bundle hash, return with bundle
       if (bundleHash !== analyzed[0].bundle) {
+        console.log("Returning 787")
         return callback(null, bundle);
       }
 
+      // If only one bundle element, return
+      if (analyzed[0].lastIndex === 0 && analyzed[0].currentIndex === 0) {
+        return callback(null, analyzed);
+      }
+
+      console.log("down here");
       // Define new trunkTransaction for search
       var trunkTx = analyzed[0].trunkTransaction;
       // Add transaction object to bundle
       bundle.push(analyzed[0]);
       // Continue traversing with new trunkTx
-      self.traverseBundle(trunkTx, bundleHash, bundle, callback);
+      index += 1;
+      return self.traverseBundle(trunkTx, bundleHash, bundle, index, directCallback, callback);
     })
   })
 }
@@ -803,6 +815,7 @@ IOTA.prototype.validateSignatures = function(expectedAddress, signatureFragments
 
   var normalizedBundleFragments = [];
   var normalizedBundleHash = Utils.normalizedBundle(bundleHash);
+
   // Split hash into 3 fragments
   for (var i = 0; i < 3; i++) {
     normalizedBundleFragments[i] = normalizedBundleHash.slice(i * 27, (i + 1) * 27);
@@ -830,7 +843,7 @@ IOTA.prototype.validateSignatures = function(expectedAddress, signatureFragments
 IOTA.prototype.tailFromBundle = function(bundleHash, callback) {
 
   var self = this;
-
+  console.log("getting tail from bundle", bundleHash);
   // Search transactions with the same bundle hash
   var findTransactions = {
     'command': 'findTransactions',
@@ -855,22 +868,31 @@ IOTA.prototype.tailFromBundle = function(bundleHash, callback) {
           }
         })
 
+        console.log(tailTransactions);
+
         // If multiple tail transactions, get the valid one
         if (tailTransactions.length > 1) {
-          async.mapSeries(tailTransactions, function(txHash, callback) {
-            self.getBundle(txHash, function(error, bundle) {
+          async.mapSeries(tailTransactions, function(txHash, cb) {
+            self.getBundle(txHash, function(e, bundle) {
+              console.log(e, bundle);
               if (bundle) {
-                return callback(null, bundle)
+                console.log("returning")
+                cb(null, bundle);
               }
             })
+          }, function(e, results) {
+            if (results) {
+              var finalBundle = [];
+              results.forEach(function(el) {
+                finalBundle.push(el[0]);
+              })
+              return callback(null, finalBundle);
+            }
           })
         } else {
           // If only one tail transaction, return it
-          self.getBundle(txHash, function(error, bundle) {
-            if (bundle) {
-              return callback(null, bundle)
-            }
-          })
+          console.log("Single tail");
+          return self.getBundle(tailTransactions[0], callback)
         }
       })
     })
@@ -888,7 +910,8 @@ IOTA.prototype.tailFromBundle = function(bundleHash, callback) {
 IOTA.prototype.getBundle = function(transaction, callback) {
 
   var self = this;
-  self.traverseBundle(transaction, null, [], function(error, bundle) {
+  console.log("Tx:", transaction)
+  self.traverseBundle(transaction, null, Array(), 0, callback, function(error, bundle) {
 
     if (error) return callback(error);
 
@@ -914,8 +937,11 @@ IOTA.prototype.getBundle = function(transaction, callback) {
       } else {
 
         // Check if (lastIndex + 1) is the same as the total sum of txs in the bundle
-        if (bundleTx.lastIndex !== lastIndex) return callback(new Error("Invalid Bundle Length"));
+        if (bundleTx.lastIndex !== lastIndex) {
+          return callback(new Error("Invalid Bundle Length"));
+        }
       }
+      console.log(bundleTx);
       var thisTxTrytes = Utils.transactionTrytes(bundleTx);
       // Absorb bundle hash + value + timestamp + lastIndex + currentIndex trytes.
       Utils.absorb(Utils.trits(thisTxTrytes.slice(2187, 2187 + 162)), state)
@@ -943,7 +969,7 @@ IOTA.prototype.getBundle = function(transaction, callback) {
         signaturesToValidate.push(newSignatureToValidate);
       }
     });
-
+    console.log(bundle);
     // Check for total sum, if not equal 0 throw error
     if (totalSum !== 0) return callback(new Error("Invalid Bundle Sum"));
 
@@ -956,7 +982,9 @@ IOTA.prototype.getBundle = function(transaction, callback) {
 
 
     // TODO Last tx should have lastIndex = currentIndex
+    if (bundle[bundle.length - 1].currentIndex !== bundle[bundle.length - 1].lastIndex) return callback(new Error("Invalid Bundle"));
 
+    if (bundle[bundle.length - 1].lastIndex !== bundle.length - 1) return callback(new Error("Invalid Bundle Sum of Elements"));
 
 
     // Validate the signatures
@@ -965,8 +993,8 @@ IOTA.prototype.getBundle = function(transaction, callback) {
 
       if (!isValidSignature) return callback("Invalid Signatures!");
     }
-
-    return callback(null, bundle);
+    console.log(bundle);
+    return callback(null, Array(bundle));
   })
 }
 
@@ -986,41 +1014,93 @@ IOTA.prototype.getTransfers = function(seed, callback) {
       self.findTransactions(self.addresses, function(err, transactions) {
 
         if (!err) {
-
+          console.log(transactions.hashes);
           // Get latest milestone
           self.getNodeInfo(function(error, nodeInfo) {
             // get inclusion states
             self.getInclusionStates(nodeInfo.latestSolidSubtangleMilestone, transactions.hashes, function(err, inclusionStates) {
               if (!err) {
-                console.log(JSON.stringify(inclusionStates));
                 // For each transaction do getBundle
                 // Then associate inclusion states with the entire bundle
-                async.map(transactions.hashes, function(txHash, callback) {
+                var hashesAlreadyFound = [];
+                var bundlesAlreadyFound = [];
+                async.mapSeries(transactions.hashes, function(txHash, cb) {
+                  console.log(transactions.hashes, hashesAlreadyFound, txHash, hashesAlreadyFound.indexOf(txHash) );
+                  if (hashesAlreadyFound.indexOf(txHash) > -1) return cb(null, undefined);
 
                   self.getBundle(txHash, function(e, bundle) {
-                    callback(null, bundle)
+                    console.log(e, bundle);
+
+                    if (bundle) {
+                      var uniqueBundles = [];
+
+                      bundle.forEach(function(bundleElement) {
+                        var stringifiedBundle = JSON.stringify(bundleElement);
+
+                        if (bundlesAlreadyFound.indexOf(stringifiedBundle) === -1) {
+                          bundlesAlreadyFound.push(stringifiedBundle);
+
+                          bundleElement.forEach(function(bundleTx) {
+                            hashesAlreadyFound.push(bundleTx.hash);
+                          })
+
+                          uniqueBundles.push(bundleElement);
+                        } else {
+                          console.log("Already found!!!", bundleElement);
+                        }
+                      })
+
+                      cb(null, uniqueBundles);
+                    }
+
+
                   })
                 }, function(error, results) {
 
-                  results = results.filter(function(n){ return n != undefined });
+                  results = results.filter(function(n){ return n !== undefined });
+
+                  var transfers = []
+
+                  results.forEach(function(bundleElements) {
+                    if (bundleElements === undefined) {
+                      return
+                    }
+
+                    bundleElements.forEach(function(bundle) {
+
+                      // Search for getInclusionStates transaction
+                      // If found, add to all elements in bundle, add to transfers
+                      // and break
+                      async.someSeries(bundle, function(bundleTx, cb) {
+                        var hash = bundleTx.hash;
+                        var index = transactions.hashes.indexOf(hash);
+
+                        if (index > -1) {
+                          var inclusionState = inclusionStates.states[index];
+
+                          bundle.forEach(function(bundleTx) {
+                            bundleTx['persistence'] = inclusionState;
+                          })
+                          transfers.push(bundle);
+                          return cb(true);
+                        }
+
+                        cb(false);
+                      })
+                    })
+                  })
+
                   // credit: http://stackoverflow.com/a/8837505
                   // Sort by timestamp
-                  results.sort(function(a, b) {
+
+                  transfers.sort(function(a, b) {
                       var x = parseInt(a[0]['timestamp']); var y = parseInt(b[0]['timestamp']);
                       return ((x < y) ? -1 : ((x > y) ? 1 : 0));
                   });
 
-                  results.forEach(function(bundle) {
-                    var hash = bundle[0].hash;
-                    var index = transactions.hashes.indexOf(hash);
-                    var inclusionState = inclusionStates.states[index];
-                    console.log(inclusionState);
-                    bundle.forEach(function(bundleTx) {
-                      bundleTx['persistence'] = inclusionState;
-                    })
-                  })
+                  console.log(transfers);
 
-                  return callback(null, results);
+                  return callback(null, transfers);
                 })
               }
             })

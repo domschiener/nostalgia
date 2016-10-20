@@ -46,24 +46,29 @@
 
                 // Persistence has to be 100
                 // Has to be output (value above 0)
-                // Should be a an address associated with seed
-                if (bundleEl.persistence && bundleEl.value > 0 && iotajs.addresses.indexOf(bundleEl.address) > -1) {
-                    totalValue += parseInt(bundleEl.value);
+                // Should be an address associated with seed
+                if (bundleEl.persistence && iotajs.addresses.indexOf(bundleEl.address) > -1) {
+                  totalValue += parseInt(bundleEl.value);
                 }
 
                 var persistence = bundles[0].persistence ? bundles[0].persistence : false;
 
                 if (bundleEl.currentIndex === 0) {
+                  var isOutput = '';
+
+                  if (bundleEl.value && iotajs.addresses.indexOf(bundleEl.address) === -1) {
+                    isOutput = "class='danger'"
+                  }
                   var getBundleBtn = '';
                   if (bundles.length > 1) {
-                    getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].bundle + "' type='button' class='btn btn-primary'>Show bundle</button>";
+                    getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].hash + "' type='button' class='btn btn-primary'>Show bundle</button>";
                   }
 
-                  content += "<tr><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
+                  content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
 
 
                 } else {
-                  content += "<tr class='collapse out " + bundles[0].bundle + " info'>";
+                  content += "<tr class='collapse out " + bundles[0].hash + " info'>";
                   content += "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
                 }
 
@@ -77,9 +82,9 @@
 
             }
 
-            function replayTransfer(tailHash) {
-
-              iotajs.replayTransfer(tailhash, function(error, success) {
+            function replayTransfer(tail) {
+              alert("Replaying your Transfer now. This can take some time");
+              iotajs.replayTransfer(tail, function(error, success) {
                 if (success) {
                   alert("Replayed your transaction");
                 }

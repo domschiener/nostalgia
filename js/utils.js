@@ -247,37 +247,68 @@ var Utils = (function(Utils, undefined) {
     *
     *
   **/
+
+  // Utils.normalizedBundle = function(bundle) {
+  //     var normalizedBundle = [];
+  //     for (var i = 0; i < 3; i++) {
+  //         var sum = 0;
+  //         for (var j = 0; j < 27; j++) {
+  //             sum += (normalizedBundle[i * 27 + j] = Utils.value(Utils.trits(bundle.charAt(i * 27 + j))));
+  //         }
+  //         if (sum >= 0) {
+  //             while (sum-- > 0) {
+  //                 for (var j = 0; j < 27; j++) {
+  //                     if (++normalizedBundle[i * 27 + j] > 13) {
+  //                         normalizedBundle[i * 27 + j] = -13;
+  //                     } else {
+  //                         break;
+  //                     }
+  //                 }
+  //             }
+  //         } else {
+  //             while (sum++ < 0) {
+  //                 for (var j = 0; j < 27; j++) {
+  //                     if (--normalizedBundle[i * 27 + j] < -13) {
+  //                         normalizedBundle[i * 27 + j] = 13;
+  //                     } else {
+  //                         break;
+  //                     }
+  //                 }
+  //             }
+  //         }
+  //     }
+  //     return normalizedBundle;
+  // }
+
   Utils.normalizedBundle = function(bundle) {
-      var normalizedBundle = [];
-      for (var i = 0; i < 3; i++) {
-          var sum = 0;
-          for (var j = 0; j < 27; j++) {
-              sum += (normalizedBundle[i * 27 + j] = Utils.value(Utils.trits(bundle.charAt(i * 27 + j))));
-          }
-          if (sum >= 0) {
-              while (sum-- > 0) {
-                  for (var j = 0; j < 27; j++) {
-                      if (++normalizedBundle[i * 27 + j] > 13) {
-                          normalizedBundle[i * 27 + j] = -13;
-                      } else {
-                          break;
-                      }
-                  }
-              }
-          } else {
-              while (sum++ < 0) {
-                  for (var j = 0; j < 27; j++) {
-                      if (--normalizedBundle[i * 27 + j] < -13) {
-                          normalizedBundle[i * 27 + j] = 13;
-                      } else {
-                          break;
-                      }
-                  }
-              }
-          }
-      }
-      return normalizedBundle;
-  }
+        var normalizedBundle = [];
+        for (var i = 0; i < 3; i++) {
+            var sum = 0;
+            for (var j = 0; j < 27; j++) {
+                sum += (normalizedBundle[i * 27 + j] = Utils.value(Utils.trits(bundle.charAt(i * 27 + j))));
+            }
+            if (sum >= 0) {
+                while (sum-- > 0) {
+                    for (var j = 0; j < 27; j++) {
+                        if (normalizedBundle[i * 27 + j] > -13) {
+                            normalizedBundle[i * 27 + j]--;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                while (sum++ < 0) {
+                    for (var j = 0; j < 27; j++) {
+                        if (normalizedBundle[i * 27 + j] < 13) {
+                            normalizedBundle[i * 27 + j]++;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return normalizedBundle;
+    }
 
   return Utils
 }(Utils || {}));
