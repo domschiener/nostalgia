@@ -941,7 +941,7 @@ IOTA.prototype.getBundle = function(transaction, callback) {
           return callback(new Error("Invalid Bundle Length"));
         }
       }
-      console.log(bundleTx);
+
       var thisTxTrytes = Utils.transactionTrytes(bundleTx);
       // Absorb bundle hash + value + timestamp + lastIndex + currentIndex trytes.
       Utils.absorb(Utils.trits(thisTxTrytes.slice(2187, 2187 + 162)), state)
@@ -993,7 +993,8 @@ IOTA.prototype.getBundle = function(transaction, callback) {
 
       if (!isValidSignature) return callback("Invalid Signatures!");
     }
-    console.log(bundle);
+
+    // Return bundle element as array
     return callback(null, Array(bundle));
   })
 }
