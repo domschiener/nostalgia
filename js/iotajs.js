@@ -977,11 +977,7 @@ IOTA.prototype.getBundle = function(transaction, callback) {
     var bundleFromTxs = Utils.trytes(bundleFromTxs);
 
     // Check if bundle hash is the same as returned by tx object
-    console.log(bundleFromTxs, bundleHash)
-    console.log(JSON.stringify(bundle));
     if (bundleFromTxs !== bundleHash) return callback(new Error("Invalid Bundle Hash"));
-
-
 
     // TODO Last tx should have lastIndex = currentIndex
     if (bundle[bundle.length - 1].currentIndex !== bundle[bundle.length - 1].lastIndex) return callback(new Error("Invalid Bundle"));
@@ -1054,6 +1050,8 @@ IOTA.prototype.getTransfers = function(seed, callback) {
                       })
 
                       cb(null, uniqueBundles);
+                    } else {
+                      cb(null, undefined)
                     }
 
 
