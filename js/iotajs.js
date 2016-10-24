@@ -1,6 +1,7 @@
 function IOTA(settings) {
-  this.version = '1.0.8';
+  this.version = '1.1.0';
   this.addresses = [];
+  this.provider = settings.host + ":" + settings.port;
 }
 
 /**
@@ -413,7 +414,7 @@ IOTA.prototype.attachAndMore = function(trytes, callback) {
 
     console.log("Got transactions to approve", toApprove);
     // attach to tangle - do pow
-    self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 13, trytes, function(error, attached) {
+    self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, 18, trytes, function(error, attached) {
       if (error) {
         return callback("ERROR")
       }
@@ -440,10 +441,10 @@ IOTA.prototype.attachAndMore = function(trytes, callback) {
   *
   *
 **/
-IOTA.prototype.replayTransfer = function(bundleHash, callback) {
+IOTA.prototype.replayTransfer = function(tailHash, callback) {
 
   var self = this;
-  self.getBundle(bundleHash, function(error, bundle) {
+  self.getBundle(tailHash, function(error, bundle) {
 
     if (error) return callback(error);
 
@@ -470,7 +471,6 @@ IOTA.prototype.getInputs = function(valueToDeduct, inputList, index, callback) {
   if (address === undefined) {
     return callback("ERROR: No Balance");
   }
-
 
   self.getBalances(Array(address), function(e, success) {
 
@@ -532,7 +532,7 @@ IOTA.prototype.getInputs = function(valueToDeduct, inputList, index, callback) {
   *
   *
 **/
-IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callback) {
+IOTA.prototype.prepareTransfers = function(seed, transfers, callback) {
   var self = this;
   var bundle = Utils.bundle();
 
@@ -605,7 +605,7 @@ IOTA.prototype.prepareTransfers = function(seed, securityLevel, transfers, callb
           var timestamp = Math.floor(Date.now() / 1000);
 
           // Add input as bundle entry
-          Utils.addEntry(bundle, securityLevel + 1, inputs[i].address, toSubtract, tag, timestamp);
+          Utils.addEntry(bundle, 2, inputs[i].address, toSubtract, tag, timestamp);
 
           // Add extra output to send remaining funds to
           if (thisBalance > totalValue) {
@@ -704,7 +704,7 @@ IOTA.prototype.transfer = function(seed, transfers, callback) {
 
   var self = this;
 
-  self.prepareTransfers(seed, 1, transfers, function(error, trytes) {
+  self.prepareTransfers(seed, transfers, function(error, trytes) {
     if (error) {
       return callback("ERROR")
     }
@@ -977,6 +977,8 @@ IOTA.prototype.getBundle = function(transaction, callback) {
     var bundleFromTxs = Utils.trytes(bundleFromTxs);
 
     // Check if bundle hash is the same as returned by tx object
+    console.log(bundleFromTxs, bundleHash)
+    console.log(JSON.stringify(bundle));
     if (bundleFromTxs !== bundleHash) return callback(new Error("Invalid Bundle Hash"));
 
 
@@ -1118,7 +1120,7 @@ IOTA.prototype.getTransfers = function(seed, callback) {
 **/
 IOTA.prototype.sendRequest = function(requestData, callback) {
   var request = new XMLHttpRequest();
-  request.open("POST", "http://localhost:14265", true);
+  request.open("POST", this.provider, true);
 
   request.onreadystatechange = function() {
 

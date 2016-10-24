@@ -13,7 +13,10 @@
 <script type="text/javascript" src="js/iotajs.js"></script>
 <script type="text/javascript">
             var seed, newAddress;
-            var iotajs = new IOTA();
+            var iotajs = new IOTA({
+              'host': 'http://localhost',
+              'port': 14265
+            });
 
             function generateNewAddress() {
               alert("This will take a few minutes to complete!");
