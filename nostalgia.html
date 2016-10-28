@@ -17,6 +17,7 @@
               'host': 'http://localhost',
               'port': 14265
             });
+            var shouldSpam = false;
 
             function generateNewAddress() {
               alert("This will take a few minutes to complete!");
@@ -159,18 +160,49 @@
                 })
 
                 content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-                content += "<tr><td></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+                content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
 
 
                 document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
               })
             }
 
+            function startSpam() {
+                shouldSpam = true;
+                var spamCount = 0;
+
+                var transfers = [{
+                  'address': '999999999999999999999999999999999999999999999999999999999999999999999999999999999',
+                  'value': 0,
+                  'message': 'DOMISWAYTOOFUCKINGCOOL',
+                  'tag': 'TOTALLY'
+                }]
+
+                async.doWhilst(function(callback) {
+                    iotajs.transfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', transfers, function(e,s) {
+                        console.log("Spam Count: ", spamCount);
+                        spamCount += 1;
+                        callback(null);
+                    })
+                }, function() {
+
+                    return shouldSpam === true;
+                }, function() {
+                    console.log("STOPPED SPAMMING")
+                })
+            }
+
+            function stopSpam() {
+
+                shouldSpam = false;
+                iotajs.sendRequest({'command': 'interruptAttachingToTangle'});
+            }
+
             function refreshPage() {
               var totalValue = 0;
               var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
               content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-              content += "<tr><td><button type='button' class='btn btn-primary' onclick='sendMessage();'>Send Message</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+              content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
               document.body.innerHTML = "<table class='table' id='txTable'> " + content + "</table>";
               getTransfers();
             }
