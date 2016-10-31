@@ -1,230 +1,230 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Nostalgia 2.0</title>
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
-<script type="text/javascript" src="js/async.min.js"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
-<script type="text/javascript" src="js/converter.js"></script>
-<script type="text/javascript" src="js/curl.js"></script>
-<script type="text/javascript" src="js/utils.js"></script>
-<script type="text/javascript" src="js/iotajs.js"></script>
-<script type="text/javascript">
-            var seed, newAddress;
-            var iotajs = new IOTA({
-              'host': 'http://localhost',
-              'port': 14265
-            });
-            var shouldSpam = false;
+    <meta charset="UTF-8">
+    <title>Nostalgia 2.0</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <script type="text/javascript" src="js/async.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <script type="text/javascript" src="js/converter.js"></script>
+    <script type="text/javascript" src="js/curl.js"></script>
+    <script type="text/javascript" src="js/utils.js"></script>
+    <script type="text/javascript" src="js/iotajs.js"></script>
+    <script type="text/javascript">
+    var seed, newAddress;
+    var iotajs = new IOTA({
+        'host': 'http://localhost',
+        'port': 14265
+    });
+    var shouldSpam = false;
 
-            function generateNewAddress() {
-              alert("This will take a few minutes to complete!");
-              iotajs.getNewAddress(seed, function(error, success) {
-                var address = success;
-                console.log("Prepared Address: ", address);
-                if (!error) {
+    function generateNewAddress() {
+        alert("This will take a few minutes to complete!");
+        iotajs.getNewAddress(seed, function(error, success) {
+            var address = success;
+            console.log("Prepared Address: ", address);
+            if (!error) {
 
-                  transfer(success, function(error, transaction) {
+                transfer(success, function(error, transaction) {
                     iotajs.addresses.push(address);
                     genAddressCallback(transaction);
-                  });
-                }
-              })
+                });
             }
+        })
+    }
 
-            function genAddressCallback(transaction) {
-              var content = addElementToTable(transaction);
+    function genAddressCallback(transaction) {
+        var content = addElementToTable(transaction);
 
-              $('#txTable tr:nth-last-child(2)').before(content);
-            }
+        $('#txTable tr:nth-last-child(2)').before(content);
+    }
 
-            function addElementToTable(bundles) {
+    function addElementToTable(bundles) {
 
-              var txValue = 0;
-              var content = '';
+        var txValue = 0;
+        var content = '';
 
-              bundles.forEach(function(bundleEl) {
+        bundles.forEach(function(bundleEl) {
 
-                var persistence = bundles[0].persistence ? bundles[0].persistence : false;
+            var persistence = bundles[0].persistence ? bundles[0].persistence : false;
 
-                if (bundleEl.currentIndex === 0) {
-                  var isOutput = '';
+            if (bundleEl.currentIndex === 0) {
+                var isOutput = '';
 
-                  if (bundleEl.value && iotajs.addresses.indexOf(bundleEl.address) === -1) {
+                if (bundleEl.value && iotajs.addresses.indexOf(bundleEl.address) === -1) {
                     isOutput = "class='danger'"
-                  }
-                  var getBundleBtn = '';
-                  if (bundles.length > 1) {
+                }
+                var getBundleBtn = '';
+                if (bundles.length > 1) {
                     getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].hash + "' type='button' class='btn btn-primary'>Show bundle</button>";
-                  }
-
-                  content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
-
-                } else {
-                  content += "<tr class='collapse out " + bundles[0].hash + " info'>";
-                  content += "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
                 }
 
-              })
+                content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
 
-              return content;
-
+            } else {
+                content += "<tr class='collapse out " + bundles[0].hash + " info'>";
+                content += "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
             }
 
-            function replayTransfer(tail) {
-              alert("Replaying your Transfer now. This can take some time");
-              iotajs.replayTransfer(tail, function(error, transaction) {
-                if (transaction) {
-                  alert("Replay was Successful!");
+        })
 
-                  var content = addElementToTable(transaction);
+        return content;
 
-                  $('#txTable tr:nth-last-child(2)').before(content);
-                }
-              })
+    }
+
+    function replayTransfer(tail) {
+        alert("Replaying your Transfer now. This can take some time");
+        iotajs.replayTransfer(tail, function(error, transaction) {
+            if (transaction) {
+                alert("Replay was Successful!");
+
+                var content = addElementToTable(transaction);
+
+                $('#txTable tr:nth-last-child(2)').before(content);
             }
+        })
+    }
 
-            function transfer(address, callback) {
-              if (address) {
+    function transfer(address, callback) {
+        if (address) {
 
-                var transfers = [{
-                  'address': address,
-                  'value': 0,
-                  'message': '',
-                  'tag': ''
-                }]
+            var transfers = [{
+                'address': address,
+                'value': 0,
+                'message': '',
+                'tag': ''
+            }]
 
-                iotajs.transfer(seed, transfers, callback)
-              } else {
+            iotajs.transfer(seed, transfers, callback)
+        } else {
 
-                var address = prompt("address"), valueToTransfer;
-                if (address == null) {
-                  alert("The transfer has been canceled!");
-                } else {
-                  valueToTransfer = prompt("Value to transfer to '" + address + "'");
-                  if (valueToTransfer == null || isNaN(valueToTransfer)) {
+            var address = prompt("address"), valueToTransfer;
+            if (address == null) {
+                alert("The transfer has been canceled!");
+            } else {
+                valueToTransfer = prompt("Value to transfer to '" + address + "'");
+                if (valueToTransfer == null || isNaN(valueToTransfer)) {
                     alert("The transfer has been canceled!");
-                  } else {
+                } else {
 
                     message = prompt("Message (can be empty): ");
                     tag = prompt("Tag for your Tx (can be empty): ")
 
                     var transfers = [{
-                      'address': address,
-                      'value': parseInt(valueToTransfer),
-                      'message': message,
-                      'tag': tag
+                        'address': address,
+                        'value': parseInt(valueToTransfer),
+                        'message': message,
+                        'tag': tag
                     }]
 
                     alert("This will take a few minutes to complete!");
                     iotajs.transfer(seed, transfers, transferCallback);
-                  }
-                }
-              }
-            }
-
-            function transferCallback(error, transaction) {
-              if (error) {
-                alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
-              } else {
-                alert("The transfer has been broadcast.");
-
-                var content = addElementToTable(transaction);
-
-                $('#txTable tr:nth-last-child(2)').before(content);
-              }
-            }
-
-            function getTransfers() {
-              iotajs.getTransfers(seed, function(error, bundles) {
-                if (!error) {
-                  getTransfersCallback(bundles);
-                }
-              })
-            }
-
-            function getTransfersCallback(bundles) {
-
-              var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
-              for (var i = 0; i < bundles.length; i++) {
-                var tableElements = addElementToTable(bundles[i])
-                content += tableElements;
-              }
-
-              iotajs.getBalances(iotajs.addresses, function(error, balances) {
-                var totalValue = 0;
-                balances.balances.forEach(function(balance) {
-                  totalValue += parseInt(balance);
-                })
-
-                content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-                content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
-
-
-                document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
-              })
-            }
-
-            function startSpam() {
-                shouldSpam = true;
-                var spamCount = 0;
-
-                var transfers = [{
-                  'address': '999999999999999999999999999999999999999999999999999999999999999999999999999999999',
-                  'value': 0,
-                  'message': 'DOMISWAYTOOFUCKINGCOOL',
-                  'tag': 'TOTALLY'
-                }]
-
-                async.doWhilst(function(callback) {
-                    iotajs.transfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', transfers, function(e,s) {
-                        console.log("Spam Count: ", spamCount);
-                        spamCount += 1;
-                        callback(null);
-                    })
-                }, function() {
-
-                    return shouldSpam === true;
-                }, function() {
-                    console.log("STOPPED SPAMMING")
-                })
-            }
-
-            function stopSpam() {
-
-                shouldSpam = false;
-                iotajs.sendRequest({'command': 'interruptAttachingToTangle'});
-            }
-
-            function refreshPage() {
-              var totalValue = 0;
-              var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
-              content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-              content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
-              document.body.innerHTML = "<table class='table' id='txTable'> " + content + "</table>";
-              getTransfers();
-            }
-
-            function setSeed(value) {
-                var i;
-                seed = "";
-                for (i = 0; i < value.length; i++) {
-                    if (("9ABCDEFGHIJKLMNOPQRSTUVWXYZ").indexOf(value.charAt(i)) < 0) {
-                        seed += "9";
-                    } else {
-                        seed += value.charAt(i);
-                    }
-                }
-                while (seed.length < 81) {
-                    seed += "9";
-                }
-                if (seed.length > 81) {
-                  seed = seed.slice(0, 81);
                 }
             }
-        </script>
+        }
+    }
+
+    function transferCallback(error, transaction) {
+        if (error) {
+            alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
+        } else {
+            alert("The transfer has been broadcast.");
+
+            var content = addElementToTable(transaction);
+
+            $('#txTable tr:nth-last-child(2)').before(content);
+        }
+    }
+
+    function getTransfers() {
+        iotajs.getTransfers(seed, function(error, bundles) {
+            if (!error) {
+                getTransfersCallback(bundles);
+            }
+        })
+    }
+
+    function getTransfersCallback(bundles) {
+
+        var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
+        for (var i = 0; i < bundles.length; i++) {
+            var tableElements = addElementToTable(bundles[i])
+            content += tableElements;
+        }
+
+        iotajs.getBalances(iotajs.addresses, function(error, balances) {
+            var totalValue = 0;
+            balances.balances.forEach(function(balance) {
+                totalValue += parseInt(balance);
+            })
+
+            content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+            content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+
+
+            document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
+        })
+    }
+
+    function startSpam() {
+        shouldSpam = true;
+        var spamCount = 0;
+
+        var transfers = [{
+            'address': '999999999999999999999999999999999999999999999999999999999999999999999999999999999',
+            'value': 0,
+            'message': 'DOMISWAYTOOFUCKINGCOOL',
+            'tag': 'TOTALLY'
+        }]
+
+        async.doWhilst(function(callback) {
+            iotajs.transfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', transfers, function(e,s) {
+                console.log("Spam Count: ", spamCount);
+                spamCount += 1;
+                callback(null);
+            })
+        }, function() {
+
+            return shouldSpam === true;
+        }, function() {
+            console.log("STOPPED SPAMMING")
+        })
+    }
+
+    function stopSpam() {
+
+        shouldSpam = false;
+        iotajs.sendRequest({'command': 'interruptAttachingToTangle'});
+    }
+
+    function refreshPage() {
+        var totalValue = 0;
+        var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
+        content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+        content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+        document.body.innerHTML = "<table class='table' id='txTable'> " + content + "</table>";
+        getTransfers();
+    }
+
+    function setSeed(value) {
+        var i;
+        seed = "";
+        for (i = 0; i < value.length; i++) {
+            if (("9ABCDEFGHIJKLMNOPQRSTUVWXYZ").indexOf(value.charAt(i)) < 0) {
+                seed += "9";
+            } else {
+                seed += value.charAt(i);
+            }
+        }
+        while (seed.length < 81) {
+            seed += "9";
+        }
+        if (seed.length > 81) {
+            seed = seed.slice(0, 81);
+        }
+    }
+    </script>
 </head>
 <body>
     <table class="table">
