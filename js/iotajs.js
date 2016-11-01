@@ -346,7 +346,7 @@ IOTA.prototype.analyzeTransactions = function(trytes, callback) {
     var analyzedTrytes = [];
 
     if (typeof trytes === 'string') trytes = Array(trytes);
-
+    console.log(trytes);
     for (var i = 0; i < trytes.length; i++) {
 
         analyzedTrytes.push(Utils.transactionObject(trytes[i]));
@@ -761,14 +761,23 @@ IOTA.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, index, dir
 
     var self = this;
     // Get trytes of transaction hash
+    console.log(trunkTx)
     self.getTrytes(trunkTx, function(error, trytes) {
 
         if (error) return callback(error);
 
         // Get transaction object
+        console.log(trytes);
+        if (!trytes.trytes[0]) {
+            console.log("HUGE ERROR: CONTACT DOM ABOUT IT")
+            console.log(bundleHash, trunkTx);
+            return callback(new Error("INVALID BUNDLE"));
+        }
+
         self.analyzeTransactions(trytes.trytes, function(error, analyzed) {
 
             if (error) return callback(error);
+
             console.log(analyzed);
             console.log(bundleHash, bundle);
             console.log(bundle.length);
@@ -895,10 +904,12 @@ IOTA.prototype.tailFromBundle = function(bundleHash, callback) {
                             return callback(null, finalBundle);
                         }
                     })
-                } else {
+                } else if (tailTransactions.length === 1) {
                     // If only one tail transaction, return it
                     console.log("Single tail");
                     return self.getBundle(tailTransactions[0], callback)
+                } else {
+                    return callback(new Error("Inconsistent Bundle View"));
                 }
             })
         })
