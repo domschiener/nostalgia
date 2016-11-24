@@ -406,7 +406,7 @@ IOTA.prototype.attachAndMore = function(trytes, callback) {
   var self = this;
 
   // Get branch and trunk
-  self.getTransactionsToApprove(27, function(error, toApprove) {
+  self.getTransactionsToApprove(3, function(error, toApprove) {
 
     if (error) {
       return callback(error)
