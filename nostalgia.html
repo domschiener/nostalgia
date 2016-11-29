@@ -5,31 +5,41 @@
     <title>Nostalgia 2.0</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
-    <script type="text/javascript" src="js/async.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
-    <script type="text/javascript" src="js/converter.js"></script>
-    <script type="text/javascript" src="js/curl.js"></script>
-    <script type="text/javascript" src="js/utils.js"></script>
-    <script type="text/javascript" src="js/iotajs.js"></script>
+    <script type="text/javascript" src="js/async.min.js"></script>
+    <script type="text/javascript" src="js/iota.min.js"></script>
     <script type="text/javascript">
-    var seed, newAddress;
+
+    var seed;
+    var addresses = new Set();
+
     var iotajs = new IOTA({
         'host': 'http://localhost',
         'port': 14265
     });
+
     var shouldSpam = false;
 
     function generateNewAddress() {
+
         alert("This will take a few minutes to complete!");
-        iotajs.getNewAddress(seed, function(error, success) {
+
+        iotajs.api.getNewAddress(seed, function(error, success) {
+
             var address = success;
+
             console.log("Prepared Address: ", address);
+
             if (!error) {
 
                 transfer(success, function(error, transaction) {
-                    iotajs.addresses.push(address);
+
+                    addresses.add(address);
                     genAddressCallback(transaction);
                 });
+
+            } else {
+                console.log("ERROR", error);
             }
         })
     }
@@ -44,15 +54,15 @@
 
         var txValue = 0;
         var content = '';
-
+        console.log(bundles);
         bundles.forEach(function(bundleEl) {
-
+            console.log(bundleEl);
             var persistence = bundles[0].persistence ? bundles[0].persistence : false;
 
             if (bundleEl.currentIndex === 0) {
                 var isOutput = '';
 
-                if (bundleEl.value && iotajs.addresses.indexOf(bundleEl.address) === -1) {
+                if (bundleEl.value && Array.from(addresses).indexOf(bundleEl.address) === -1) {
                     isOutput = "class='danger'"
                 }
                 var getBundleBtn = '';
@@ -70,12 +80,14 @@
         })
 
         return content;
-
     }
 
     function replayTransfer(tail) {
+
         alert("Replaying your Transfer now. This can take some time");
-        iotajs.replayTransfer(tail, function(error, transaction) {
+
+        iotajs.api.replayBundle(tail, 3, 18, function(error, transaction) {
+            console.log(transaction);
             if (transaction) {
                 alert("Replay was Successful!");
 
@@ -87,29 +99,35 @@
     }
 
     function transfer(address, callback) {
+
         if (address) {
 
             var transfers = [{
                 'address': address,
-                'value': 0,
-                'message': '',
-                'tag': ''
+                'value': 0
             }]
 
-            iotajs.transfer(seed, transfers, callback)
+            iotajs.api.sendTransfer(seed, 9, 18, transfers, callback)
+
         } else {
 
             var address = prompt("address"), valueToTransfer;
             if (address == null) {
-                alert("The transfer has been canceled!");
+                alert("The transfer has been cancelled!");
             } else {
-                valueToTransfer = prompt("Value to transfer to '" + address + "'");
+
+                var valueToTransfer = prompt("Value to transfer to '" + address + "'");
+
                 if (valueToTransfer == null || isNaN(valueToTransfer)) {
+
                     alert("The transfer has been canceled!");
+
                 } else {
 
-                    message = prompt("Message (can be empty): ");
-                    tag = prompt("Tag for your Tx (can be empty): ")
+                    var message = prompt("Message (can be empty): ");
+                    var tag = prompt("Tag for your Tx (can be empty): ");
+
+                    console.log(message, tag);
 
                     var transfers = [{
                         'address': address,
@@ -119,7 +137,7 @@
                     }]
 
                     alert("This will take a few minutes to complete!");
-                    iotajs.transfer(seed, transfers, transferCallback);
+                    iotajs.api.sendTransfer(seed, 9, 18, transfers, transferCallback);
                 }
             }
         }
@@ -138,38 +156,55 @@
     }
 
     function getTransfers() {
-        iotajs.getTransfers(seed, function(error, bundles) {
+
+        iotajs.api.getTransfers(seed, {'inclusionStates': true}, function(error, bundles) {
             if (!error) {
-                getTransfersCallback(bundles);
+                console.log(bundles);
+                getTransfersCallback(seed, bundles);
+            } else {
+                console.log(error);
             }
         })
     }
 
-    function getTransfersCallback(bundles) {
+    function getTransfersCallback(seed, bundles) {
 
-        var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
-        for (var i = 0; i < bundles.length; i++) {
-            var tableElements = addElementToTable(bundles[i])
-            content += tableElements;
-        }
+        // Very expensive call
+        // Simply to cross check and make sure that the balance of the user is correct
+        iotajs.api.getNewAddress(seed, {'returnAll': true}, function(error, allAddresses) {
 
-        iotajs.getBalances(iotajs.addresses, function(error, balances) {
-            var totalValue = 0;
-            balances.balances.forEach(function(balance) {
-                totalValue += parseInt(balance);
+            allAddresses.forEach(function(addr) {
+                addresses.add(addr);
             })
 
-            content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-            content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
+            var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
+
+            for (var i = 0; i < bundles.length; i++) {
+                var tableElements = addElementToTable(bundles[i])
+                content += tableElements;
+            }
+
+            iotajs.api.getBalances(allAddresses, 100, function(error, balances) {
+
+                var totalValue = 0;
+                balances.balances.forEach(function(balance) {
+                    totalValue += parseInt(balance);
+                })
+
+                content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
+                content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
 
 
-            document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
+                document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
+            })
         })
     }
 
     function startSpam() {
         shouldSpam = true;
         var spamCount = 0;
+
+        console.log("STARTED SPAMMING");
 
         var transfers = [{
             'address': '999999999999999999999999999999999999999999999999999999999999999999999999999999999',
@@ -179,11 +214,14 @@
         }]
 
         async.doWhilst(function(callback) {
-            iotajs.transfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', transfers, function(e,s) {
+
+            iotajs.api.sendTransfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', 3, 18, transfers, function(e,s) {
+                console.log(s);
                 console.log("Spam Count: ", spamCount);
                 spamCount += 1;
                 callback(null);
             })
+
         }, function() {
 
             return shouldSpam === true;
@@ -193,9 +231,9 @@
     }
 
     function stopSpam() {
-
+        console.log("Stopped");
         shouldSpam = false;
-        iotajs.sendRequest({'command': 'interruptAttachingToTangle'});
+        iotajs.api.interruptAttachingToTangle();
     }
 
     function refreshPage() {
