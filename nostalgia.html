@@ -14,8 +14,8 @@
     var addresses = new Set();
 
     var iotajs = new IOTA({
-        'host': 'http://138.68.90.186',
-        'port': 12499
+        'host': 'http://localhost',
+        'port': 14265
     });
 
     var shouldSpam = false;
@@ -28,7 +28,8 @@
 
             var address = success;
 
-            console.log("Prepared Address: ", address);
+            console.log("Prepared Address (without checksum): ", address);
+            console.log("Prepared Address (with checksum): ", iotajs.utils.addChecksum(address));
 
             if (!error) {
 
@@ -56,7 +57,7 @@
         var content = '';
         console.log(bundles);
         bundles.forEach(function(bundleEl) {
-            console.log(bundleEl);
+
             var persistence = bundles[0].persistence ? bundles[0].persistence : false;
 
             if (bundleEl.currentIndex === 0) {
@@ -70,7 +71,7 @@
                     getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].hash + "' type='button' class='btn btn-primary'>Show bundle</button>";
                 }
 
-                content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + bundles[0].address + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
+                content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + iotajs.utils.addChecksum(bundles[0].address) + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
 
             } else {
                 content += "<tr class='collapse out " + bundles[0].hash + " info'>";
@@ -87,7 +88,7 @@
         alert("Replaying your Transfer now. This can take some time");
 
         iotajs.api.replayBundle(tail, 3, 18, function(error, transaction) {
-            console.log(transaction);
+
             if (transaction) {
                 alert("Replay was Successful!");
 
@@ -127,7 +128,8 @@
                     var message = prompt("Message (can be empty): ");
                     var tag = prompt("Tag for your Tx (can be empty): ");
 
-                    console.log(message, tag);
+                    // Check if message and tag are correct trytes 
+                    if (!iotajs.validate.isTrytes(message) || !iotajs.validate.isTrytes(tag));
 
                     var transfers = [{
                         'address': address,
