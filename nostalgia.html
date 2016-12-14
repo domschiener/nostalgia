@@ -36,7 +36,7 @@
                 transfer(success, function(error, transaction) {
 
                     addresses.add(address);
-                    genAddressCallback(transaction);
+                    addElementsToTable(transaction);
                 });
 
             } else {
@@ -45,42 +45,43 @@
         })
     }
 
-    function genAddressCallback(transaction) {
-        var content = addElementToTable(transaction);
-
-        $('#txTable tr:nth-last-child(2)').before(content);
-    }
-
-    function addElementToTable(bundles) {
-
+    function addElementsToTable(bundles) {
         var txValue = 0;
         var content = '';
-        console.log(bundles);
-        bundles.forEach(function(bundleEl) {
 
+        var trs = [];
+        bundles.forEach(function(bundleEl) {
             var persistence = bundles[0].persistence ? bundles[0].persistence : false;
 
+            var tr = document.createElement('tr');
             if (bundleEl.currentIndex === 0) {
-                var isOutput = '';
-
                 if (bundleEl.value && Array.from(addresses).indexOf(bundleEl.address) === -1) {
-                    isOutput = "class='danger'"
+                    tr.className = 'danger';
                 }
+
                 var getBundleBtn = '';
                 if (bundles.length > 1) {
                     getBundleBtn = "<button data-toggle='collapse' data-target='." + bundles[0].hash + "' type='button' class='btn btn-primary'>Show bundle</button>";
                 }
 
-                content += "<tr " + isOutput +"><td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + iotajs.utils.addChecksum(bundles[0].address) + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td></tr>";
-
+                tr.innerHTML = "<td>" + new Date(bundles[0].timestamp * 1000) + "</td><td>" + iotajs.utils.addChecksum(bundles[0].address) + "</td><td>" + bundleEl.value + "</td><td>" + getBundleBtn + "</td><td><button type='button' class='btn btn-primary' onclick=\"replayTransfer('" + bundles[0].hash + "');\">" + persistence +"</button></td>";
             } else {
-                content += "<tr class='collapse out " + bundles[0].hash + " info'>";
-                content += "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
+                tr.className = "collapse out " + bundles[0].hash + " info";
+                tr.innerHTML = "<td>" + new Date(bundleEl.timestamp * 1000) + "</td><td>" + bundleEl.address + "</td><td>" + bundleEl.value + "</td><td></td><td></td></tr>";
             }
+            trs.push(tr);
+        });
 
-        })
+        // Get rid of existing rows except header row and total row.
+        var rows = document.querySelectorAll('#txTable tr');
+        var totalRow = Array.prototype.slice.call(rows, -1)[0];
+        Array.prototype.slice.call(rows, 1).forEach(function(e) { e.remove(); });
 
-        return content;
+        var table = document.querySelector('#txTable tbody');
+        trs.forEach(function(tr) { table.appendChild(tr); });
+
+        // Put the total row back in
+        table.appendChild(totalRow);
     }
 
     function replayTransfer(tail) {
@@ -92,9 +93,7 @@
             if (transaction) {
                 alert("Replay was Successful!");
 
-                var content = addElementToTable(transaction);
-
-                $('#txTable tr:nth-last-child(2)').before(content);
+                addElementsToTable(transaction);
             }
         })
     }
@@ -151,14 +150,11 @@
         } else {
             alert("The transfer has been broadcast.");
 
-            var content = addElementToTable(transaction);
-
-            $('#txTable tr:nth-last-child(2)').before(content);
+            addElementsToTable(transaction);
         }
     }
 
     function getTransfers() {
-
         iotajs.api.getTransfers(seed, {'inclusionStates': true}, function(error, bundles) {
             if (!error) {
                 console.log(bundles);
@@ -170,34 +166,24 @@
     }
 
     function getTransfersCallback(seed, bundles) {
-
         // Very expensive call
         // Simply to cross check and make sure that the balance of the user is correct
         iotajs.api.getNewAddress(seed, {'returnAll': true}, function(error, allAddresses) {
 
             allAddresses.forEach(function(addr) {
                 addresses.add(addr);
-            })
+            });
 
-            var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
-
-            for (var i = 0; i < bundles.length; i++) {
-                var tableElements = addElementToTable(bundles[i])
-                content += tableElements;
-            }
+            addElementsToTable(bundles);
 
             iotajs.api.getBalances(allAddresses, 100, function(error, balances) {
 
                 var totalValue = 0;
                 balances.balances.forEach(function(balance) {
                     totalValue += parseInt(balance);
-                })
+                });
 
-                content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-                content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
-
-
-                document.body.innerHTML = "<table class='table' id='txTable'>" + content + "</table>";
+                document.getElementById('total').innerHTML = totalValue;
             })
         })
     }
@@ -238,15 +224,6 @@
         iotajs.api.interruptAttachingToTangle();
     }
 
-    function refreshPage() {
-        var totalValue = 0;
-        var content = "<th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>";
-        content += "<tr><td></td><td>Total</td><td>" + totalValue + "</td><td></td></tr>";
-        content += "<tr><td><button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button><button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button></td><td><button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button></td><td><button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button></td><td><button type='button' class='btn btn-primary' onclick='refreshPage();'>Refresh page</button></td></tr>";
-        document.body.innerHTML = "<table class='table' id='txTable'> " + content + "</table>";
-        getTransfers();
-    }
-
     function setSeed(value) {
         var i;
         seed = "";
@@ -263,16 +240,36 @@
         if (seed.length > 81) {
             seed = seed.slice(0, 81);
         }
+
+        document.getElementById('setSeed').style.display = 'none';
+        document.getElementById('transfers').style.display = 'block';
     }
     </script>
 </head>
 <body>
-    <table class="table">
-        <tr>
-            <td>
-                <input type="password" id="seed" placeholder="Seed" onkeydown="if (event.keyCode == 13) { setSeed(value.toUpperCase()); refreshPage(); }" />
-            </td>
-        </tr>
-    </table>
+    <div id="setSeed">
+      <input type="password" id="seed" placeholder="Seed" onkeydown="if (event.keyCode == 13) { setSeed(value.toUpperCase()); getTransfers(); }" />
+    </div>
+
+    <div id="transfers" style="display: none">
+      <table class="table" id="txTable">
+        <tbody>
+          <tr>
+            <th>Timestamp</th><th>Address</th><th>Value</th><th>Bundle</th><th>Confirmed</th>
+          </tr>
+
+          <tr>
+            <td></td><td>Total</td><td id="total"></td><td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div>
+        <button type='button' class='btn btn-primary' onclick='startSpam();'>Start Spam</button>
+        <button type='button' class='btn btn-primary' onclick='stopSpam();'>Stop Spam</button>
+        <button type='button' class='btn btn-primary' onclick='generateNewAddress();'>Generate new address</button>
+        <button type='button' class='btn btn-primary' onclick='transfer();'>Transfer iotas</button>
+        <button type='button' class='btn btn-primary' onclick='getTransfers();'>Refresh page</button>
+    </div>
 </body>
 </html>
