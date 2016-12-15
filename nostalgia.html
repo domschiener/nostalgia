@@ -87,7 +87,7 @@
 
         alert("Replaying your Transfer now. This can take some time");
 
-        iotajs.api.replayBundle(tail, 3, 18, function(error, transaction) {
+        iotajs.api.replayBundle(tail, 9, 18, function(error, transaction) {
 
             if (transaction) {
                 alert("Replay was Successful!");
@@ -146,7 +146,9 @@
     }
 
     function transferCallback(error, transaction) {
+
         if (error) {
+            console.log(error);
             alert("The transfer has failed! Make sure you have enough CONFIRMED iotas.");
         } else {
             alert("The transfer has been broadcast.");
@@ -161,7 +163,6 @@
 
         iotajs.api.getTransfers(seed, {'inclusionStates': true}, function(error, bundles) {
             if (!error) {
-                console.log(bundles);
                 getTransfersCallback(seed, bundles);
             } else {
                 console.log(error);
