@@ -7,7 +7,7 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
     <script type="text/javascript" src="js/async.min.js"></script>
-    <script type="text/javascript" src="js/iota.min.js"></script>
+    <script type="text/javascript" src="js/iota.js"></script>
     <script type="text/javascript">
 
     var seed;
@@ -47,7 +47,7 @@
 
     function genAddressCallback(transaction) {
         var content = addElementToTable(transaction);
-
+        console.log("TX: ", transaction)
         $('#txTable tr:nth-last-child(2)').before(content);
     }
 
@@ -55,7 +55,7 @@
 
         var txValue = 0;
         var content = '';
-        console.log(bundles);
+
         bundles.forEach(function(bundleEl) {
 
             var persistence = bundles[0].persistence ? bundles[0].persistence : false;
@@ -91,7 +91,7 @@
 
             if (transaction) {
                 alert("Replay was Successful!");
-
+                console.log("BUNDLE: ", transaction)
                 var content = addElementToTable(transaction);
 
                 $('#txTable tr:nth-last-child(2)').before(content);
@@ -154,7 +154,7 @@
             alert("The transfer has been broadcast.");
 
             var content = addElementToTable(transaction);
-
+            console.log("BUNDLE: ", transaction)
             $('#txTable tr:nth-last-child(2)').before(content);
         }
     }
@@ -163,6 +163,7 @@
 
         iotajs.api.getTransfers(seed, {'inclusionStates': true}, function(error, bundles) {
             if (!error) {
+                console.log(bundles);
                 getTransfersCallback(seed, bundles);
             } else {
                 console.log(error);
@@ -218,7 +219,7 @@
 
         async.doWhilst(function(callback) {
 
-            iotajs.api.sendTransfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', 3, 18, transfers, function(e,s) {
+            iotajs.api.sendTransfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', 9, 18, transfers, function(e,s) {
                 console.log(s);
                 console.log("Spam Count: ", spamCount);
                 spamCount += 1;

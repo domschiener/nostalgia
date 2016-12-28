@@ -467,7 +467,7 @@ api.prototype.getTransactionsObjects = function(hashes, callback) {
         trytes.trytes.forEach(function(thisTrytes) {
 
             // If no trytes returned, simply push null as placeholder
-            if (thisTrytes === null) {
+            if (!thisTrytes) {
                 transactionObject.push(null);
             } else {
                 transactionObjects.push(Utils.transactionObject(thisTrytes));
@@ -566,20 +566,20 @@ api.prototype.broadcastAndStore = function(trytes, callback) {
 api.prototype.sendTrytes = function(trytes, depth, minWeightMagnitude, callback) {
 
     var self = this;
-
+    console.log("RAW TRANSACTION DATA: ", trytes);
     // Get branch and trunk
     self.getTransactionsToApprove(depth, function(error, toApprove) {
 
         if (error) {
             return callback(error)
         }
-
+        console.log("TRANSACTIONS TO APPROVE: ", toApprove)
         // attach to tangle - do pow
         self.attachToTangle(toApprove.trunkTransaction, toApprove.branchTransaction, minWeightMagnitude, trytes, function(error, attached) {
             if (error) {
                 return callback(error)
             }
-
+            console.log("ATTACHED TRYTES: ", attached.trytes);
             // Broadcast and store tx
             self.broadcastAndStore(attached.trytes, function(error, success) {
 
@@ -1139,10 +1139,10 @@ api.prototype.prepareTransfers = function(seed, transfers, options, callback) {
 
     function addRemainder(inputs) {
 
+        var totalTransferValue = totalValue;
         for (var i = 0; i < inputs.length; i++) {
 
             var thisBalance = inputs[i].balance;
-            var totalTransferValue = totalValue;
             var toSubtract = 0 - thisBalance;
             var timestamp = Math.floor(Date.now() / 1000);
 
@@ -1299,12 +1299,12 @@ api.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) {
 
         var trytes = trytesList.trytes[0]
 
-        if (trytes === null) return callback(new Error("Bundle transactions not visible"))
+        if (!trytes) return callback(new Error("Bundle transactions not visible"))
 
         // get the transaction object
         var txObject = Utils.transactionObject(trytes);
 
-        if (error) return callback(error);
+        if (!txObject) return callback(new Error("Invalid trytes, could not create object"));
 
         // If first transaction to search is not a tail, return error
         if (!bundleHash && txObject.currentIndex !== 0) {
@@ -1320,11 +1320,13 @@ api.prototype.traverseBundle = function(trunkTx, bundleHash, bundle, callback) {
 
         // If different bundle hash, return with bundle
         if (bundleHash !== txObject.bundle) {
+
             return callback(null, bundle);
         }
 
         // If only one bundle element, return
         if (txObject.lastIndex === 0 && txObject.currentIndex === 0) {
+
             return callback(null, Array(txObject));
         }
 
@@ -1448,6 +1450,8 @@ api.prototype._bundlesFromAddresses = function(addresses, inclusionStates, callb
 
     // call wrapper function to get txs associated with addresses
     self.findTransactionObjects({'addresses': addresses}, function(error, transactionObjects) {
+
+        if (error) return callback(error);
 
         // set of tail transactions
         var tailTransactions = new Set();
@@ -2534,7 +2538,7 @@ var address = function(digests) {
     var address = [];
 
     var curl = new Curl();
-    
+
     curl.initialize();
     curl.absorb(digests);
     curl.squeeze(address);
@@ -3214,7 +3218,7 @@ var convertUnits = function(value, fromUnit, toUnit) {
 
 
     // If not valid value, throw error
-    if (!isDecimal(value)) {
+    if (!inputValidator.isDecimal(value)) {
 
         throw new Error("Invalid value input");
     }
@@ -3425,16 +3429,16 @@ var transactionTrytes = function(transaction) {
     }
 
     return transaction.signatureMessageFragment
-            + transaction.address
-            + Converter.trytes(valueTrits)
-            + transaction.tag
-            + Converter.trytes(timestampTrits)
-            + Converter.trytes(currentIndexTrits)
-            + Converter.trytes(lastIndexTrits)
-            + transaction.bundle
-            + transaction.trunkTransaction
-            + transaction.branchTransaction
-            + transaction.nonce;
+    + transaction.address
+    + Converter.trytes(valueTrits)
+    + transaction.tag
+    + Converter.trytes(timestampTrits)
+    + Converter.trytes(currentIndexTrits)
+    + Converter.trytes(lastIndexTrits)
+    + transaction.bundle
+    + transaction.trunkTransaction
+    + transaction.branchTransaction
+    + transaction.nonce;
 }
 
 /**
@@ -3488,6 +3492,34 @@ var categorizeTransfers = function(transfers, addresses) {
     return categorized;
 }
 
+/**
+*   Checks that a given uri is valid
+*
+*   Valid Examples:
+*   udp://[2001:db8:a0b:12f0::1]:14265
+*   udp://[2001:db8:a0b:12f0::1]
+*   udp://8.8.8.8:14265
+*   udp://domain.com
+*   udp://domain2.com:14265
+*
+*   @method isUri
+*   @param {string} node
+*   @returns {bool} valid
+**/
+var isUri = function(node) {
+
+    var getInside = /^udp:\/\/([\[][^\]\.]*[\]]|[^\[\]:]*)[:]{0,1}([0-9]{1,}$|$)/i;
+
+    var stripBrackets = /[\[]{0,1}([^\[\]]*)[\]]{0,1}/;
+
+    var uriTest = /((^\s*((([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))\s*$)|(^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$))|(^\s*((?=.{1,255}$)(?=.*[A-Za-z].*)[0-9A-Za-z](?:(?:[0-9A-Za-z]|\b-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|\b-){0,61}[0-9A-Za-z])?)*)\s*$)/;
+
+    if(!getInside.test(node)) {
+        return false;
+    }
+
+    return uriTest.test(stripBrackets.exec(getInside.exec(node)[1])[1]);
+}
 
 module.exports = {
     convertUnits        : convertUnits,
@@ -3498,7 +3530,8 @@ module.exports = {
     fromTrytes          : fromTrytes,
     transactionObject   : transactionObject,
     transactionTrytes   : transactionTrytes,
-    categorizeTransfers : categorizeTransfers
+    categorizeTransfers : categorizeTransfers,
+    isUri               : isUri
 }
 
 },{"../crypto/converter":5,"../crypto/curl":6,"./asciiToTrytes":11,"./inputValidator":12,"./makeRequest":13}],15:[function(require,module,exports){
@@ -6428,7 +6461,7 @@ function doDuring(fn, test, callback) {
  * passes. The function is passed a `callback(err)`, which must be called once
  * it has completed with an optional `err` argument. Invoked with (callback).
  * @param {Function} test - synchronous truth test to perform after each
- * execution of `iteratee`. Invoked with the non-error callback results of 
+ * execution of `iteratee`. Invoked with the non-error callback results of
  * `iteratee`.
  * @param {Function} [callback] - A callback which is called after the test
  * function has failed and repeated execution of `iteratee` has stopped.
@@ -14723,7 +14756,7 @@ var IncomingMessage = exports.IncomingMessage = function (xhr, response, mode) {
 		self.url = response.url
 		self.statusCode = response.status
 		self.statusMessage = response.statusText
-		
+
 		response.headers.forEach(function(header, key){
 			self.headers[key.toLowerCase()] = header
 			self.rawHeaders.push(key, header)
@@ -14809,7 +14842,7 @@ IncomingMessage.prototype._onXHRProgress = function () {
 				self.push(new Buffer(response))
 				break
 			}
-			// Falls through in IE8	
+			// Falls through in IE8
 		case 'text':
 			try { // This will fail when readyState = 3 in IE9. Switch mode and wait for readyState = 4
 				response = xhr.responseText
@@ -16059,7 +16092,7 @@ exports.XMLHttpRequest = function() {
   this.responseXML = "";
   this.status = null;
   this.statusText = null;
-  
+
   // Whether cross-site Access-Control requests should be made using
   // credentials such as cookies or authorization headers
   this.withCredentials = false;
