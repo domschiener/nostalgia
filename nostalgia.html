@@ -35,8 +35,12 @@
 
                 transfer(success, function(error, transaction) {
 
-                    addresses.add(address);
-                    genAddressCallback(transaction);
+                    if (error) {
+                        console.log("ERROR", error);   
+                    } else {
+                        addresses.add(address);
+                        genAddressCallback(transaction);
+                    }
                 });
 
             } else {
