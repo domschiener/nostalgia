@@ -15,7 +15,7 @@
 
     var iotajs = new IOTA({
         'host': 'http://localhost',
-        'port': 14265
+        'port': 14700
     });
 
     var shouldSpam = false;
@@ -91,7 +91,7 @@
 
         alert("Replaying your Transfer now. This can take some time");
 
-        iotajs.api.replayBundle(tail, 9, 18, function(error, transaction) {
+        iotajs.api.replayBundle(tail, 3, 9, function(error, transaction) {
 
             if (transaction) {
                 alert("Replay was Successful!");
@@ -112,7 +112,7 @@
                 'value': 0
             }]
 
-            iotajs.api.sendTransfer(seed, 9, 18, transfers, callback)
+            iotajs.api.sendTransfer(seed, 3, 9, transfers, callback)
 
         } else {
 
@@ -143,7 +143,7 @@
                     }]
 
                     alert("This will take a few minutes to complete!");
-                    iotajs.api.sendTransfer(seed, 9, 18, transfers, transferCallback);
+                    iotajs.api.sendTransfer(seed, 3, 9, transfers, transferCallback);
                 }
             }
         }
@@ -223,7 +223,7 @@
 
         async.doWhilst(function(callback) {
 
-            iotajs.api.sendTransfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', 9, 18, transfers, function(e,s) {
+            iotajs.api.sendTransfer('999999999999999999999999999999999999999999999999999999999999999999999999999999999', 6, 9, transfers, function(e,s) {
                 console.log(s);
                 console.log("Spam Count: ", spamCount);
                 spamCount += 1;
